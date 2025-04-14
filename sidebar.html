@@ -524,10 +524,7 @@
         }
 
         if (lastDocContent === null) {
-            console.log("handleAutoAnalysis: Storing initial document content.");
-            lastDocContent = docContent;
-            lastChangeTimestamp = Date.now(); // Set initial timestamp
-            return;
+            // (This isn't a special case, we'll just run the analysis for the first time)
         }
 
         if (docContent !== lastDocContent) {
