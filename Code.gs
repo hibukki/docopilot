@@ -177,7 +177,7 @@ function highlightCommentsInDoc(quotesToHighlight) {
       }
     });
     console.log("Highlighting process completed.");
-    DocumentApp.flush();
+    doc.flush();
   } catch (e) {
     console.error("Error highlighting quotes in document: " + e.stack);
     throw new Error("Failed to highlight quotes in document: " + e.message);
