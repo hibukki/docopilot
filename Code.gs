@@ -26,6 +26,35 @@ function showSidebar() {
 const HIGHLIGHT_COLOR = '#FFF8C4'; // Light yellow/orange
 const FOCUSED_HIGHLIGHT_COLOR = '#FFD54F'; // A slightly more orange/yellow, similar to Docs focus
 
+// Define the default prompt text directly
+const DEFAULT_PROMPT_TEXT = `Please review the following document text and find comments that might be helpful to the user. They will be displayed in a sidebar.
+
+First, provide your reasoning or thought process in a 'thinking' field. Then, provide the comments in a 'comments' field.
+
+Present your output STRICTLY as a single JSON object with two keys: "thinking" (containing your thought process as a string) and "comments" (containing a JSON array of comment objects). Each comment object in the array must have a "quote" key (containing the exact text phrase) and a "comment" key (containing your feedback).
+
+Example format:
+{
+  "thinking": "The document seems to be about X. The user might struggle with Y and Z.",
+  "comments": [
+    {
+      "quote": "This is a sentence to comment on.",
+      "comment": "This sentence could be clearer."
+    },
+    {
+      "quote": "Another phrase needing feedback.",
+      "comment": "Consider rephrasing this part."
+    }
+  ]
+}
+
+Do not include any text outside of this single JSON object structure.
+
+Document Text:
+---
+{docText}
+---`;
+
 /**
  * Gets the text content of the body of the current document.
  *
@@ -53,7 +82,7 @@ function getGeminiComments(finalPrompt, apiKey) {
     throw new Error("API Key is required to contact Gemini.");
   }
 
-  const API_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=" + apiKey;
+  const API_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + apiKey;
 
   const requestBody = {
     contents: [{
@@ -132,7 +161,7 @@ function getGeminiComments(finalPrompt, apiKey) {
     } catch (e) {
       console.error("Error parsing Gemini response: " + e.stack + "\nResponse Body:\n" + responseBody);
       // Include original error message and a LARGER snippet of the body in the thrown error
-      const snippet = responseBody ? responseBody.substring(0, 500) + '...' : 'N/A'; // Increased snippet size
+      const snippet = responseBody ? responseBody: 'N/A';
       throw new Error(`Could not parse Gemini response. Parse Error: ${e.message || e.toString()}. Body Snippet: ${snippet}`);
     }
   } else {
@@ -389,27 +418,14 @@ function getApiKey() {
 // -- Prompt Management --
 
 const USER_PROMPT_KEY = 'USER_ANALYSIS_PROMPT';
-let defaultPromptCache = null; // Cache for the default prompt
 
 /**
- * Reads the default prompt text from the 'default_prompt.txt' file.
- * Caches the result for efficiency.
+ * Returns the default prompt text defined as a constant.
  * @return {string} The default prompt text.
  */
 function getDefaultPrompt() {
-  if (defaultPromptCache === null) {
-    try {
-      // Use HtmlService to read a text file (common workaround in Apps Script)
-      const htmlOutput = HtmlService.createHtmlOutputFromFile('default_prompt.txt');
-      defaultPromptCache = htmlOutput.getContent();
-      console.log("Successfully read and cached default prompt.");
-    } catch (e) {
-      console.error("Error reading default_prompt.txt: " + e.stack);
-      // Fallback prompt if file reading fails
-      defaultPromptCache = "Please review the following document text and provide constructive comments. For each comment, identify the exact phrase or sentence from the text that the comment refers to. Present your output STRICTLY as a JSON array of objects, where each object has a \"quote\" key (containing the exact text phrase) and a \"comment\" key (containing your feedback).\n\nDocument Text:\n---\n{docText}\n---";
-    }
-  }
-  return defaultPromptCache;
+  // Simply return the constant
+  return DEFAULT_PROMPT_TEXT;
 }
 
 /**
