@@ -177,6 +177,10 @@ function highlightCommentsInDoc(quotesToHighlight) {
       }
     });
     console.log("Highlighting process completed.");
+    // Debug: Check the type and methods of the doc object before flushing
+    console.log("Type of doc object: " + typeof doc);
+    console.log("Does doc have flush method? " + ('flush' in doc));
+    console.log("Is doc.flush a function? " + (typeof doc.flush === 'function'));
     doc.flush();
   } catch (e) {
     console.error("Error highlighting quotes in document: " + e.stack);
