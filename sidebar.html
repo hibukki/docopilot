@@ -206,18 +206,16 @@
       document.getElementById('customPrompt').value = defaultPrompt;
       document.getElementById('analyzeButton').addEventListener('click', analyzeDocument);
 
-      // Load saved API key on startup
       google.script.run
         .withSuccessHandler(populateApiKey)
         .withFailureHandler(logInitialApiKeyError)
         .getApiKey();
 
-      let currentComments = []; // Store the current comments with quotes
+      let currentComments = [];
       let currentlyFocusedCommentId = null;
       let pollingInterval = null;
-      let lastProcessedCursorState = null; // Variable to store the last state
+      let lastProcessedCursorState = null;
 
-      // Start polling immediately after sidebar setup
       startPolling();
 
       function populateApiKey(savedKey) {
@@ -364,26 +362,29 @@
         pollingInterval = setInterval(() => {
           console.log("Polling Interval: Calling getCursorState...");
           google.script.run
-            .withSuccessHandler(updateFocus)
+            .withSuccessHandler(gotCursorState)
             .withFailureHandler(logPollingError)
             .getCursorState();
         }, 1500);
       }
 
-      function updateFocus(cursorState) {
-        console.log("Polling Interval: Received state:", cursorState);
+      function gotCursorState(cursorState) {
+        console.log("gotCursorState:", cursorState);
 
-        // Optimization: Check if cursor context actually changed
+        // Null?
+        if (!cursorState) {
+          console.log("gotCursorState: Cursor state is null. Skipping update.");
+          return;
+        }
+
+        // Unchanged?
         if (lastProcessedCursorState && cursorState && 
             lastProcessedCursorState.elementText === cursorState.elementText && 
             lastProcessedCursorState.offset === cursorState.offset) {
             console.log("Polling: Cursor state unchanged since last check. Skipping update.");
-            // Update lastProcessedCursorState even if unchanged, in case the object reference differs
-            lastProcessedCursorState = cursorState; 
             return;
         }
         
-        // Store the new state we are about to process
         lastProcessedCursorState = cursorState; 
 
         let foundCommentId = null;
@@ -419,13 +420,7 @@
             console.log("Polling: No cursor state, element text, or comments available for matching.");
         }
 
-        // Update focus based on whether a comment was found
-        if (currentlyFocusedCommentId !== foundCommentId) {
-             console.log(`Polling: Focus target changed to ${foundCommentId}. Calling setCommentFocus.`);
-             setCommentFocus(foundCommentId); // Call the central focus function
-        } else {
-             console.log(`Polling: Focus target (${foundCommentId}) remains the same. No UI update needed.`);
-        }
+        setCommentFocus(foundCommentId); // Call the central focus function
       }
 
       /**
