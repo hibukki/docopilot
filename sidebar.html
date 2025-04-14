@@ -39,16 +39,28 @@
     <script>
       const HIGHLIGHT_COLOR = '#FFF8C4'; // Define on client-side too
       const DOC_TEXT_PLACEHOLDER = '{docText}';
-      const defaultPrompt = `Please review the following document text and provide constructive comments. For each comment, identify the exact phrase or sentence from the text that the comment refers to. Present your output STRICTLY as a JSON array of objects, where each object has a "quote" key (containing the exact text phrase) and a "comment" key (containing your feedback). Do not include any text outside of the JSON array.\n\nExample format:\n[\n  {\n    "quote": "This is a sentence to comment on.",\n    "comment": "This sentence could be clearer."
+      const defaultPrompt = `Please review the following document text and provide 2-5 constructive comments. For each comment, identify the exact phrase or sentence from the text that the comment refers to. Present your output STRICTLY as a JSON array of objects, where each object has a "quote" key (containing the exact text phrase) and a "comment" key (containing your feedback). Do not include any text outside of the JSON array.\n\nExample format:\n[\n  {\n    "quote": "This is a sentence to comment on.",\n    "comment": "This sentence could be clearer."
   },\n  {\n    "quote": "Another phrase needing feedback.",\n    "comment": "Consider rephrasing this part."
   }\n]\n\nDocument Text:\n---\n${DOC_TEXT_PLACEHOLDER}\n---`;
 
       document.getElementById('customPrompt').value = defaultPrompt;
       document.getElementById('analyzeButton').addEventListener('click', analyzeDocument);
 
+      // Load saved API key on startup
+      google.script.run.withSuccessHandler(populateApiKey).getApiKey();
+
       let currentComments = []; // Store the current comments with quotes
       let currentlyFocusedCommentId = null;
       let pollingInterval = null;
+
+      function populateApiKey(savedKey) {
+        if (savedKey) {
+          console.log("Found saved API key, populating input.");
+          document.getElementById('apiKey').value = savedKey;
+        } else {
+          console.log("No saved API key found.");
+        }
+      }
 
       function analyzeDocument() {
         const apiKey = document.getElementById('apiKey').value;
@@ -69,6 +81,12 @@
         analyzeButton.disabled = true;
         resultsDiv.innerHTML = '<p>Fetching document content...</p>';
         stopPolling(); // Stop polling while fetching new comments
+
+        // Save the key when analysis is attempted (if valid)
+        if (apiKey) {
+           console.log("Attempting to save API Key..."); // Add log for saving
+           google.script.run.saveApiKey(apiKey);
+        }
 
         google.script.run
           .withSuccessHandler(handleDocContent)
@@ -173,11 +191,11 @@
         if (pollingInterval) return;
         console.log("Starting focus polling interval.");
         pollingInterval = setInterval(() => {
-          console.log("Polling: Calling getCursorState..."); // Updated function name
+          console.log("Polling: Calling getCursorState...");
           google.script.run
             .withSuccessHandler(updateFocus)
             .withFailureHandler(logPollingError)
-            .getCursorState(); // Updated function name
+            .getCursorState();
         }, 1500);
       }
 
@@ -289,9 +307,9 @@
       // Utility function to escape quotes for CSS selectors
       function escapeCssSelector(str) {
         if (!str) return '';
-        return str.replace(/(["'\\!#$%&()*+,./:;<=>?@[\]^`{|}~])/g, '\\$1');
+        return str.replace(/(["'\!#$%&()*+,./:;<=>?@[\]^`{|}~])/g, '\$1');
       }
 
     </script>
   </body>
-</html> 
+</html>

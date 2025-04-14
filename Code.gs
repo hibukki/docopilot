@@ -259,4 +259,42 @@ function getCursorState() {
     console.error("Error getting cursor state: " + e.stack);
     return null;
   }
+}
+
+/**
+ * Saves the user's Gemini API key to User Properties.
+ *
+ * @param {string} apiKey The API key to save.
+ */
+function saveApiKey(apiKey) {
+  try {
+    if (apiKey && typeof apiKey === 'string') {
+      PropertiesService.getUserProperties().setProperty('GEMINI_API_KEY', apiKey);
+      console.log("API Key saved successfully.");
+    } else {
+      // Optionally clear the key if an empty/invalid value is passed
+      PropertiesService.getUserProperties().deleteProperty('GEMINI_API_KEY');
+      console.log("Cleared saved API Key.");
+    }
+  } catch (e) {
+    console.error("Error saving API Key: " + e.stack);
+    // Decide if we should throw or just log, maybe log is better here
+    // throw new Error("Could not save API key.");
+  }
+}
+
+/**
+ * Retrieves the user's saved Gemini API key from User Properties.
+ *
+ * @return {string|null} The saved API key, or null if not found.
+ */
+function getApiKey() {
+  try {
+    const savedKey = PropertiesService.getUserProperties().getProperty('GEMINI_API_KEY');
+    console.log("Retrieved API Key: " + (savedKey ? 'Found' : 'Not Found'));
+    return savedKey;
+  } catch (e) {
+    console.error("Error retrieving API Key: " + e.stack);
+    return null; // Return null on error
+  }
 } 
