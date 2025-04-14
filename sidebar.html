@@ -196,8 +196,8 @@
 
     <button id="analyzeButton">Analyze for Comments</button>
 
-    <div id="results">
-      <!-- Comments will be displayed here -->
+    <div id="commentsContainer">
+      <!-- REMOVED Comment: Comments will be displayed here -->
       <p>Enter your API key and click the button to analyze.</p>
     </div>
 
@@ -219,7 +219,7 @@
         .getApiKey();
       google.script.run
         .withSuccessHandler(populatePrompt)
-        .withFailureHandler(logPromptError) // Add error handler for prompt
+        .withFailureHandler(logPromptError) // REMOVED: Add error handler for prompt
         .getUserOrDefaultPrompt(); 
 
       let currentComments = [];
@@ -227,10 +227,10 @@
       let pollingInterval = null;
       let lastProcessedCursorState = null;
       let loadedPromptValue = ''; 
-      let lastDocContent = null;        // Store last known document content
-      let lastChangeTimestamp = 0;    // Timestamp of last detected content change
-      let analysisDebounceTimer = null; // Timer for debouncing auto-analysis
-      const AUTO_ANALYSIS_DELAY = 1500; // Wait 1.5 seconds after last change
+      let lastDocContent = null;        // REMOVED: Store last known document content
+      let lastChangeTimestamp = 0;    // REMOVED: Timestamp of last detected content change
+      let analysisDebounceTimer = null; // REMOVED: Timer for debouncing auto-analysis
+      const AUTO_ANALYSIS_DELAY = 1500; // REMOVED: Wait 1.5 seconds after last change
 
       startPolling();
 
@@ -275,7 +275,7 @@
       function analyzeDocument() {
         const apiKey = getApiKeyInputValue();
         const customPromptTemplate = getPromptInputValue();
-        const resultsDiv = document.getElementById('results');
+        const resultsDiv = document.getElementById('commentsContainer');
         const analyzeButton = document.getElementById('analyzeButton');
 
         if (!apiKey) {
@@ -342,7 +342,7 @@
         console.log("Document Content Received (first 100 chars):", docContent.substring(0, 100));
         const apiKey = getApiKeyInputValue();
         const customPromptTemplate = getPromptInputValue();
-        const resultsDiv = document.getElementById('results');
+        const resultsDiv = document.getElementById('commentsContainer');
         resultsDiv.innerHTML = '<p>Analyzing content with Gemini...</p>';
 
         if (!docContent || docContent.trim().length === 0) {
@@ -357,11 +357,11 @@
         google.script.run
           .withSuccessHandler(displayComments)
           .withFailureHandler(handleError)
-          .getGeminiComments(finalPrompt, apiKey); // Pass final prompt
+          .getGeminiComments(finalPrompt, apiKey); // REMOVED: Pass final prompt
       }
 
       function displayComments(comments) {
-         const resultsDiv = document.getElementById('results');
+         const resultsDiv = document.getElementById('commentsContainer');
          const analyzeButton = document.getElementById('analyzeButton');
          analyzeButton.disabled = false;
 
@@ -376,7 +376,7 @@
          }
 
          // Render comments
-         let html = '<h2>Comments:</h2>'; // Changed title
+         let html = '<h2>Comments:</h2>';
          comments.forEach((comment, index) => {
            const commentId = `comment-${index}`;
            html += `<div class="comment-block" data-quote="${escapeHtml(comment.quote)}" id="${commentId}">`;
@@ -420,7 +420,7 @@
       }
 
       function handleError(error) {
-        const resultsDiv = document.getElementById('results');
+        const resultsDiv = document.getElementById('commentsContainer');
         const analyzeButton = document.getElementById('analyzeButton');
         analyzeButton.disabled = false; // Re-enable button
 
@@ -459,14 +459,14 @@
       }
 
       function handlePollingResults(cursorState, docContent) {
-          // 1. Handle Cursor Focus Update (as before)
+          // REMOVED: 1. Handle Cursor Focus Update (as before)
           handleCursorFocus(cursorState);
 
-          // 2. Handle Auto-Analysis based on Document Content Change
+          // REMOVED: 2. Handle Auto-Analysis based on Document Content Change
           handleAutoAnalysis(docContent);
       }
 
-      // Renamed from updateFocus to be more specific
+      // REMOVED: Renamed from updateFocus to be more specific
       function handleCursorFocus(cursorState) { 
         console.log("handleCursorFocus: Processing state:", cursorState);
 
@@ -548,7 +548,7 @@
                 const apiKey = getApiKeyInputValue();
                 const customPromptTemplate = getPromptInputValue();
                 if (apiKey && customPromptTemplate) {
-                    getCommentsFromLLM(); // Call the trigger function
+                    getCommentsFromLLM(); // REMOVED: Call the trigger function
                 } else {
                     console.log("handleAutoAnalysis: Skipping auto-analysis due to missing API key or prompt.");
                 }
@@ -562,11 +562,11 @@
       }
 
       function getCommentsFromLLM() {
-          console.log("getCommentsFromLLM: Starting analysis..."); // Renamed log
-          const apiKey = getApiKeyInputValue(); // Use helper
-          const customPromptTemplate = getPromptInputValue(); // Use helper
-          const resultsDiv = document.getElementById('results');
-          // resultsDiv.innerHTML = '<p>Auto-analyzing...</p>'; 
+          console.log("getCommentsFromLLM: Starting analysis..."); // REMOVED: Renamed log
+          const apiKey = getApiKeyInputValue(); // REMOVED: Use helper
+          const customPromptTemplate = getPromptInputValue(); // REMOVED: Use helper
+          const resultsDiv = document.getElementById('commentsContainer'); // Updated ID
+          // REMOVED: resultsDiv.innerHTML = '<p>Auto-analyzing...</p>'; 
 
           google.script.run
             .withSuccessHandler(handleDocContent)
@@ -627,7 +627,7 @@
               .highlightCommentsInDoc(allQuotes, quoteToFocus); // Just highlight
       }
 
-      // Renamed from clearFocus for clarity -> Now clearSidebarFocus
+      // REMOVED: Renamed from clearFocus for clarity -> Now clearSidebarFocus
       function clearSidebarFocus() {
          if (currentlyFocusedCommentId) {
              console.log("Clearing sidebar focus from:", currentlyFocusedCommentId);
