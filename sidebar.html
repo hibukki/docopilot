@@ -167,6 +167,35 @@
         display: block;
         margin-top: calc(var(--spacing-unit) / 2);
       }
+
+      .text-button {
+        float: right; 
+        background: none; 
+        border: none; 
+        color: var(--primary-color); 
+        cursor: pointer; 
+        padding: 0; 
+        font-size: 12px; 
+        margin-top: 0; /* Adjust if needed */
+      }
+      
+      .save-button {
+        float: right;
+        background-color: var(--primary-color);
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: calc(var(--spacing-unit) * 0.5) var(--spacing-unit);
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background-color 0.2s ease-in-out;
+        margin-top: calc(var(--spacing-unit) / 2);
+      }
+      
+      .save-button:hover {
+         background-color: #1558b0;
+      }
     </style>
   </head>
   <body>
@@ -179,17 +208,23 @@
         <div>
           <label for="apiKey">Gemini API Key:</label>
           <input type="password" id="apiKey" style="width: calc(100% - 16px);">
-          <small>Need a key? <a href="https://ai.google.dev/gemini-api/docs/api-key" target="_blank">Get one here</a>.</small>
+          <div>
+            <small style="float: left;">Need a key? <a href="https://ai.google.dev/gemini-api/docs/api-key" target="_blank">Get one here</a>.</small>
+            <button id="saveApiKeyButton" class="save-button" title="Save API Key" style="display: none;">Save Key</button>
+          </div>
+          <div style="clear: both;"></div> <!-- Clear float -->
         </div>
     
         <!-- Prompt Section -->
         <div>
             <label for="customPrompt">
                 Analysis Prompt:
-                <button id="resetPromptButton" title="Reset to default prompt" style="float: right; background: none; border: none; color: var(--primary-color); cursor: pointer; padding: 0; font-size: 12px; margin-top: -2px;">(Reset)</button>
-                <button id="savePromptButton" title="Save current prompt" style="float: right; background: none; border: none; color: var(--primary-color); cursor: pointer; padding: 0; font-size: 12px; margin-top: -2px; margin-right: 5px; display: none;">(Save)</button>
+                <button id="resetPromptButton" title="Reset to default prompt" class="text-button">(Reset)</button>
             </label>
             <textarea id="customPrompt"></textarea>
+            <div style="text-align: right;"> <!-- Container for button -->
+                 <button id="savePromptButton" class="save-button" title="Save current prompt" style="display: none;">Save Prompt</button>
+            </div>
         </div>
       </div>
     </details>
@@ -209,7 +244,9 @@
       document.getElementById('analyzeButton').addEventListener('click', analyzeDocument);
       document.getElementById('resetPromptButton').addEventListener('click', resetPromptToDefault);
       document.getElementById('savePromptButton').addEventListener('click', saveCurrentPrompt);
+      document.getElementById('saveApiKeyButton').addEventListener('click', saveCurrentApiKey);
       document.getElementById('customPrompt').addEventListener('input', handlePromptInputChange);
+      document.getElementById('apiKey').addEventListener('input', handleApiKeyInputChange);
 
       // Load initial state from server
       google.script.run
@@ -226,6 +263,7 @@
       let pollingInterval = null;
       let lastProcessedCursorState = null;
       let loadedPromptValue = ''; 
+      let loadedApiKey = '';
       let lastDocContent = null;        
       let lastChangeTimestamp = 0;    
       let analysisDebounceTimer = null; 
@@ -247,8 +285,11 @@
         if (savedKey) {
           console.log("Found saved API key, populating input.");
           document.getElementById('apiKey').value = savedKey;
+          loadedApiKey = savedKey;
+          handleApiKeyInputChange();
         } else {
           console.log("No saved API key found.");
+          loadedApiKey = '';
         }
       }
 
@@ -256,8 +297,8 @@
         console.log("Populating prompt text area.");
         const textarea = document.getElementById('customPrompt');
         textarea.value = promptText;
-        loadedPromptValue = promptText; // Store the loaded value
-        handlePromptInputChange(); // Check initial state for save button visibility
+        loadedPromptValue = promptText;
+        handlePromptInputChange();
       }
 
       function logInitialApiKeyError(error) {
@@ -290,12 +331,6 @@
         analyzeButton.disabled = true;
         resultsDiv.innerHTML = '<p>Fetching document content...</p>';
 
-        // Save the key (prompt is saved via explicit button)
-        if (apiKey) {
-           console.log("Attempting to save API Key...");
-           google.script.run.saveApiKey(apiKey);
-        }
-       
         google.script.run
           .withSuccessHandler(handleDocContent)
           .withFailureHandler(handleError)
@@ -306,8 +341,7 @@
           console.log("Resetting prompt to default...");
           google.script.run
               .withSuccessHandler(promptText => { 
-                  populatePrompt(promptText); // Update textarea and loaded value
-                  // Explicitly clear saved user prompt property when resetting
+                  populatePrompt(promptText);
                   google.script.run.saveUserPrompt(null);
               })
               .withFailureHandler(logPromptError)
@@ -320,20 +354,43 @@
           google.script.run
               .withSuccessHandler(() => {
                   console.log("Save successful handler: Updating loaded value and hiding button.");
-                  loadedPromptValue = currentPrompt; // Update the baseline
-                  handlePromptInputChange(); // Hide button again
+                  loadedPromptValue = currentPrompt;
+                  handlePromptInputChange();
               })
-              .withFailureHandler(logPromptError) // Can reuse prompt error logger
+              .withFailureHandler(logPromptError)
               .saveUserPrompt(currentPrompt);
+      }
+
+      function saveCurrentApiKey() {
+          const currentApiKey = getApiKeyInputValue();
+          console.log("Saving current API key...");
+          google.script.run
+              .withSuccessHandler(() => {
+                  console.log("API Key save successful handler: Updating loaded value and hiding button.");
+                  loadedApiKey = currentApiKey;
+                  handleApiKeyInputChange();
+              })
+              .withFailureHandler(logInitialApiKeyError)
+              .saveApiKey(currentApiKey);
       }
 
       function handlePromptInputChange() {
           const currentPrompt = document.getElementById('customPrompt').value;
           const saveButton = document.getElementById('savePromptButton');
           if (currentPrompt !== loadedPromptValue) {
-              saveButton.style.display = 'inline'; // Show save button
+              saveButton.style.display = 'inline';
           } else {
-              saveButton.style.display = 'none'; // Hide save button
+              saveButton.style.display = 'none';
+          }
+      }
+
+      function handleApiKeyInputChange() {
+          const currentApiKey = getApiKeyInputValue();
+          const saveButton = document.getElementById('saveApiKeyButton');
+          if (currentApiKey !== loadedApiKey) {
+              saveButton.style.display = 'inline';
+          } else {
+              saveButton.style.display = 'none';
           }
       }
 
@@ -346,11 +403,10 @@
 
         if (!docContent || docContent.trim().length === 0) {
             resultsDiv.innerHTML = '<p>Document is empty, nothing to analyze.</p>';
-            document.getElementById('analyzeButton').disabled = false; // Re-enable button
+            document.getElementById('analyzeButton').disabled = false;
             return;
         }
 
-        // Replace placeholder in prompt with actual document content
         const finalPrompt = customPromptTemplate.replace(DOC_TEXT_PLACEHOLDER, docContent);
 
         google.script.run
@@ -365,16 +421,15 @@
          analyzeButton.disabled = false;
 
          console.log("Comments received:", comments);
-         currentComments = comments; // Store comments for later use
-         currentlyFocusedCommentId = null; // Reset focus
-         clearSidebarFocus(); // Clear visual focus
+         currentComments = comments;
+         currentlyFocusedCommentId = null;
+         clearSidebarFocus();
 
          if (!comments || comments.length === 0) {
            resultsDiv.innerHTML = '<p>No comments were generated.</p>';
            return;
          }
 
-         // Render comments
          let html = '<h2>Comments:</h2>';
          comments.forEach((comment, index) => {
            const commentId = `comment-${index}`;
@@ -384,26 +439,23 @@
          });
          resultsDiv.innerHTML = html;
 
-         // Add click listeners AFTER rendering
          comments.forEach((_, index) => {
            const commentId = `comment-${index}`;
            const element = document.getElementById(commentId);
            if (element) {
-             // Call setCommentFocus AND trigger scroll on click
              element.addEventListener('click', () => {
                 setCommentFocus(commentId);
                 const quoteToScroll = element.getAttribute('data-quote');
                 if (quoteToScroll) {
                   console.log("Click detected, requesting scroll to:", quoteToScroll);
                   google.script.run
-                    .withFailureHandler(logScrollError) // Add a simple error handler
+                    .withFailureHandler(logScrollError)
                     .scrollToQuote(quoteToScroll);
                 }
              });
            }
          });
 
-         // Initial highlighting (no focus or scroll)
          setCommentFocus(null);
       }
 
@@ -420,21 +472,16 @@
       function handleError(error) {
         const resultsDiv = document.getElementById('commentsContainer');
         const analyzeButton = document.getElementById('analyzeButton');
-        analyzeButton.disabled = false; // Re-enable button
+        analyzeButton.disabled = false;
 
-        // Log the full error for debugging
         console.error("Script Error:", JSON.stringify(error, null, 2));
 
-        // Display a user-friendly message
         resultsDiv.innerHTML = `<p style="color: red;">Error: ${escapeHtml(error.message || String(error))}</p>`;
 
-        // Special handling for API key errors
         if (typeof error.message === 'string' && (error.message.includes('API key not valid') || error.message.includes('API_KEY_INVALID'))) {
             resultsDiv.innerHTML += `<p style="color: red;">Please check your Gemini API Key. <a href="https://ai.google.dev/gemini-api/docs/api-key" target="_blank">Need help?</a></p>`;
         }
       }
-
-      // --- Cursor Focus Polling & Auto-Analysis --- 
 
       function startPolling() {
         if (pollingInterval) {
@@ -444,16 +491,15 @@
         console.log("startPolling: Setting up polling interval...");
         pollingInterval = setInterval(() => {
           console.log("Polling Interval: Calling getCursorState and getDocumentContent...");
-          // Fetch both pieces of state concurrently
           Promise.all([
             new Promise((resolve, reject) => google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getCursorState()),
             new Promise((resolve, reject) => google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getDocumentContent())
           ]).then(([cursorState, docContent]) => {
             handlePollingResults(cursorState, docContent);
           }).catch(error => {
-            logPollingError(error); // Log error if either call fails
+            logPollingError(error);
           });
-        }, 1500); // Keep polling interval (adjust if needed)
+        }, 1500);
       }
 
       function handlePollingResults(cursorState, docContent) {
@@ -464,7 +510,6 @@
       function handleCursorFocus(cursorState) { 
         console.log("handleCursorFocus: Processing state:", cursorState);
 
-        // Optimization: Check if cursor context actually changed
         if (lastProcessedCursorState && cursorState && 
             lastProcessedCursorState.elementText === cursorState.elementText && 
             lastProcessedCursorState.offset === cursorState.offset) {
@@ -507,7 +552,6 @@
             console.log("handleCursorFocus: No cursor state, element text, or comments available for matching.");
         }
 
-        // Update focus UI
         if (currentlyFocusedCommentId !== foundCommentId) {
              console.log(`handleCursorFocus: Focus target changed to ${foundCommentId}. Calling setCommentFocus.`);
              setCommentFocus(foundCommentId);
@@ -531,18 +575,15 @@
             console.log("handleAutoAnalysis: Document content changed.");
             lastDocContent = docContent;
             lastChangeTimestamp = Date.now();
-            // Clear existing debounce timer if content changes again
             if (analysisDebounceTimer) {
                 console.log("handleAutoAnalysis: Clearing existing analysis timer.");
                 clearTimeout(analysisDebounceTimer);
                 analysisDebounceTimer = null;
             }
-             // Set a new timer to trigger analysis after delay
             console.log(`handleAutoAnalysis: Setting analysis timer for ${AUTO_ANALYSIS_DELAY}ms.`);
             analysisDebounceTimer = setTimeout(() => {
                 console.log("handleAutoAnalysis: Debounce delay elapsed. Triggering analysis.");
-                analysisDebounceTimer = null; // Clear the timer variable
-                // Check API key etc. before triggering
+                analysisDebounceTimer = null;
                 const apiKey = getApiKeyInputValue();
                 const customPromptTemplate = getPromptInputValue();
                 if (apiKey && customPromptTemplate) {
@@ -569,30 +610,19 @@
             .getDocumentContent();
       }
 
-      /**
-       * Central function to set the focus on a specific comment (or clear focus).
-       * Handles both sidebar UI and document highlighting.
-       * @param {string | null} commentId The ID of the comment to focus, or null to clear focus.
-       */
       function setCommentFocus(commentId) {
         console.log(`setCommentFocus: Target comment ID: ${commentId}`);
         const previouslyFocusedId = currentlyFocusedCommentId;
 
         const quoteToFocus = updateSidebarFocusUI(commentId);
 
-        // Update Document Highlighting ONLY if focus actually changed
         if (currentlyFocusedCommentId !== previouslyFocusedId) {
             updateDocumentHighlighting(quoteToFocus);
         }
       }
       
-      /**
-       * Updates the sidebar UI to show the focused comment.
-       * @param {string | null} commentId The ID of the comment to focus, or null.
-       * @returns {string | null} The quote text associated with the focused comment, or null.
-       */
       function updateSidebarFocusUI(commentId) {
-        clearSidebarFocus(); // Clear previous sidebar visual focus
+        clearSidebarFocus();
         let quoteToFocus = null;
         if (commentId) {
             const newElement = document.getElementById(commentId);
@@ -610,16 +640,12 @@
         return quoteToFocus;
       }
 
-      /**
-       * Calls the server to update the document highlighting based on the focused quote.
-       * @param {string | null} quoteToFocus The quote to highlight with focus color, or null.
-       */
       function updateDocumentHighlighting(quoteToFocus) {
           console.log(`Requesting document highlight update. Focused quote: "${quoteToFocus || 'None'}"`);
           const allQuotes = currentComments.map(c => c.quote);
           google.script.run
-              .withFailureHandler(onHighlightError) // Highlight error handler
-              .highlightCommentsInDoc(allQuotes, quoteToFocus); // Just highlight
+              .withFailureHandler(onHighlightError)
+              .highlightCommentsInDoc(allQuotes, quoteToFocus);
       }
 
       function clearSidebarFocus() {
@@ -641,13 +667,10 @@
           console.error("Error during scrollToQuote call:", error);
       }
 
-      // --- Utility Functions --- 
-
-      // Utility function to prevent basic XSS
       function escapeHtml(unsafe) {
           if (typeof unsafe !== 'string') {
               console.warn('escapeHtml called with non-string:', unsafe);
-              return unsafe; // Return as-is if not a string
+              return unsafe;
           }
           return unsafe
                .replace(/&/g, "&amp;")
@@ -657,7 +680,6 @@
                .replace(/'/g, "&#039;");
       }
 
-      // Utility function to escape quotes for CSS selectors
       function escapeCssSelector(str) {
         if (!str) return '';
         return str.replace(/(['"\\!#$%&()*+,./:;<=>?@[\]^`{|}~])/g, '\\$1');
