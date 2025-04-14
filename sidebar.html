@@ -57,6 +57,9 @@
       let currentlyFocusedCommentId = null;
       let pollingInterval = null;
 
+      // Start polling immediately after sidebar setup
+      startPolling();
+
       function populateApiKey(savedKey) {
         if (savedKey) {
           console.log("Found saved API key, populating input.");
@@ -166,8 +169,7 @@
       }
 
       function onHighlightSuccess() {
-        console.log("onHighlightSuccess: Document highlighting successful. Starting polling...");
-        startPolling();
+        console.log("onHighlightSuccess: Document highlighting successful.");
       }
 
       function onHighlightError(error) {
@@ -175,7 +177,6 @@
         // Maybe show a non-fatal error to the user
         // document.getElementById('results').innerHTML += '<p style="color: orange;">Could not highlight comments in document.</p>';
         // Still start polling even if highlighting fails?
-        startPolling();
       }
 
       function handleError(error) {
