@@ -2,9 +2,126 @@
 <html>
   <head>
     <base target="_top">
+    <style>
+      /* Basic styling */
+      body { font-family: sans-serif; margin: 10px; }
+      #results { margin-top: 15px; border-top: 1px solid #ccc; padding-top: 10px; }
+      .comment-block { border: 1px solid #eee; padding: 8px; margin-bottom: 8px; }
+      .comment-quote { font-style: italic; color: #555; margin-bottom: 4px; }
+      .comment-text { }
+      button { margin-top: 5px; }
+    </style>
   </head>
   <body>
-    <h1>Hello Sidebar!</h1>
-    <p>This is the content of the sidebar.</p>
+    <h1>Document Analysis</h1>
+
+    <div>
+      <label for="apiKey">Gemini API Key:</label><br>
+      <input type="password" id="apiKey" style="width: 95%;">
+    </div>
+
+    <button id="analyzeButton">Analyze for Comments</button>
+
+    <div id="results">
+      <!-- Comments will be displayed here -->
+      <p>Click the button to analyze the document.</p>
+    </div>
+
+    <script>
+      document.getElementById('analyzeButton').addEventListener('click', analyzeDocument);
+
+      function analyzeDocument() {
+        const apiKey = document.getElementById('apiKey').value;
+        const resultsDiv = document.getElementById('results');
+        const analyzeButton = document.getElementById('analyzeButton');
+
+        if (!apiKey) {
+          resultsDiv.innerHTML = '<p style="color: red;">Please enter your Gemini API Key.</p>';
+          return;
+        }
+
+        // Disable button and show loading state
+        analyzeButton.disabled = true;
+        resultsDiv.innerHTML = '<p>Fetching document content...</p>';
+
+        google.script.run
+          .withSuccessHandler(handleDocContent)
+          .withFailureHandler(handleError)
+          .getDocumentContent();
+      }
+
+      function handleDocContent(docContent) {
+        console.log("Document Content Received (first 100 chars):", docContent.substring(0, 100));
+        const apiKey = document.getElementById('apiKey').value;
+        const resultsDiv = document.getElementById('results');
+        resultsDiv.innerHTML = '<p>Analyzing content with Gemini...</p>';
+
+        if (!docContent || docContent.trim().length === 0) {
+            resultsDiv.innerHTML = '<p>Document is empty, nothing to analyze.</p>';
+            document.getElementById('analyzeButton').disabled = false; // Re-enable button
+            return;
+        }
+
+        google.script.run
+          .withSuccessHandler(displayComments)
+          .withFailureHandler(handleError)
+          .getGeminiComments(docContent, apiKey);
+      }
+
+      function displayComments(comments) {
+         const resultsDiv = document.getElementById('results');
+         const analyzeButton = document.getElementById('analyzeButton');
+         analyzeButton.disabled = false; // Re-enable button
+
+         console.log("Comments received:", comments);
+
+         if (!comments || comments.length === 0) {
+           resultsDiv.innerHTML = '<p>No comments were generated.</p>';
+           return;
+         }
+
+         // Render comments
+         let html = '<h2>Generated Comments:</h2>';
+         comments.forEach(comment => {
+           html += '<div class="comment-block">';
+           html += `<div class="comment-quote">${escapeHtml(comment.quote)}</div>`;
+           html += `<div class="comment-text">${escapeHtml(comment.comment)}</div>`;
+           html += '</div>';
+         });
+         resultsDiv.innerHTML = html;
+      }
+
+      function handleError(error) {
+        const resultsDiv = document.getElementById('results');
+        const analyzeButton = document.getElementById('analyzeButton');
+        analyzeButton.disabled = false; // Re-enable button
+
+        // Log the full error for debugging
+        console.error("Script Error:", JSON.stringify(error, null, 2));
+
+        // Display a user-friendly message
+        resultsDiv.innerHTML = `<p style="color: red;">Error: ${escapeHtml(error.message || String(error))}</p>`;
+
+        // Special handling for API key errors if possible (may vary)
+        if (typeof error.message === 'string' && error.message.includes('API key not valid')) {
+            resultsDiv.innerHTML += '<p style="color: red;">Please check your Gemini API Key.</p>';
+        }
+      }
+
+      // Utility function to prevent basic XSS
+      function escapeHtml(unsafe) {
+          if (typeof unsafe !== 'string') {
+              console.warn('escapeHtml called with non-string:', unsafe);
+              return unsafe; // Return as-is if not a string
+          }
+          return unsafe
+               .replace(/&/g, "&amp;")
+               .replace(/</g, "&lt;")
+               .replace(/>/g, "&gt;")
+               .replace(/"/g, "&quot;")
+               .replace(/'/g, "&#039;");
+      }
+
+    </script>
   </body>
 </html> 
