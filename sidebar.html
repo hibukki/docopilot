@@ -158,8 +158,7 @@
       }
 
       function onHighlightSuccess() {
-        console.log("Document highlighting successful.");
-        // Start polling for cursor focus
+        console.log("onHighlightSuccess: Document highlighting successful. Starting polling...");
         startPolling();
       }
 
@@ -192,10 +191,13 @@
       // --- Cursor Focus Polling --- 
 
       function startPolling() {
-        if (pollingInterval) return;
-        console.log("Starting focus polling interval.");
+        if (pollingInterval) {
+            console.log("startPolling: Polling already active.");
+            return; 
+        }
+        console.log("startPolling: Setting up polling interval...");
         pollingInterval = setInterval(() => {
-          console.log("Polling: Calling getCursorState...");
+          console.log("Polling Interval: Calling getCursorState...");
           google.script.run
             .withSuccessHandler(updateFocus)
             .withFailureHandler(logPollingError)
@@ -217,7 +219,7 @@
       }
 
       function updateFocus(cursorState) {
-        console.log("Polling: Received from getCursorState:", cursorState);
+        console.log("Polling Interval: Received state:", cursorState);
 
         let foundCommentId = null;
 
