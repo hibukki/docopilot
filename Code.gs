@@ -53,7 +53,7 @@ function getGeminiComments(finalPrompt, apiKey) {
     throw new Error("API Key is required to contact Gemini.");
   }
 
-  const API_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=" + apiKey;
+  const API_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + apiKey;
 
   const requestBody = {
     contents: [{
