@@ -2,32 +2,191 @@
 <html>
   <head>
     <base target="_top">
+    <!-- Add Material Icons and Roboto font (optional but nice for Material feel) -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+
     <style>
+      :root {
+        --primary-color: #1a73e8; /* Google Blue */
+        --focus-border-color: #4285F4;
+        --background-color: #f8f9fa;
+        --surface-color: #ffffff;
+        --on-surface-color: #202124;
+        --on-surface-variant-color: #5f6368;
+        --border-color: #dadce0;
+        --hover-background: #f1f3f4;
+        --highlight-color: #FFF8C4; 
+        --focused-highlight-color: #FFD54F;
+        --border-radius: 8px;
+        --spacing-unit: 8px;
+      }
+
       /* Basic styling */
-      body { font-family: sans-serif; margin: 10px; }
-      #results { margin-top: 15px; border-top: 1px solid #ccc; padding-top: 10px; }
-      .comment-block { border: 1px solid #eee; padding: 8px; margin-bottom: 8px; transition: border-color 0.3s ease; }
-      .comment-quote { font-style: italic; color: #555; margin-bottom: 4px; }
-      .comment-text { }
-      button { margin-top: 5px; }
-      textarea { width: 95%; margin-top: 2px; height: 80px; font-family: inherit; }
-      .focused-comment { border-color: #4285F4; border-width: 2px; }
-      label { display: block; margin-top: 10px; font-weight: bold;}
+      body {
+        font-family: 'Roboto', sans-serif;
+        margin: 0;
+        padding: calc(var(--spacing-unit) * 2);
+        background-color: var(--background-color);
+        color: var(--on-surface-color);
+        font-size: 14px;
+      }
+
+      h1 {
+        font-size: 18px;
+        font-weight: 500;
+        margin: 0 0 var(--spacing-unit) 0;
+        color: var(--on-surface-variant-color);
+      }
+
+      #results { 
+        margin-top: calc(var(--spacing-unit) * 2);
+        border-top: 1px solid var(--border-color);
+        padding-top: calc(var(--spacing-unit) * 2);
+      }
+      
+      .comment-block {
+        background-color: var(--surface-color);
+        border: 1px solid var(--border-color);
+        padding: var(--spacing-unit) calc(var(--spacing-unit) * 1.5);
+        margin-bottom: var(--spacing-unit);
+        border-radius: var(--border-radius);
+        cursor: pointer;
+        transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
+      }
+      
+      .comment-block:hover {
+        background-color: var(--hover-background);
+      }
+      
+      /* Remove quote display */
+      /* .comment-quote { font-style: italic; color: var(--on-surface-variant-color); margin-bottom: calc(var(--spacing-unit) / 2); font-size: 13px; } */
+      
+      .comment-text {
+         line-height: 1.5;
+      }
+      
+      button {
+        background-color: var(--primary-color);
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: calc(var(--spacing-unit) * 1) calc(var(--spacing-unit) * 2);
+        margin-top: calc(var(--spacing-unit) * 2);
+        font-weight: 500;
+        cursor: pointer;
+        transition: background-color 0.2s ease-in-out;
+      }
+      
+      button:hover {
+          background-color: #1558b0; /* Darker blue */
+      }
+      
+      button:disabled {
+          background-color: #bdbdbd;
+          cursor: not-allowed;
+      }
+
+      textarea {
+        width: calc(100% - 16px); /* Account for padding */
+        margin-top: calc(var(--spacing-unit) / 2);
+        height: 100px;
+        font-family: inherit;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        padding: calc(var(--spacing-unit));
+        font-size: 13px;
+      }
+      
+      input[type="password"] {
+        width: calc(100% - 16px); /* Account for padding */
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        padding: var(--spacing-unit);
+        margin-top: calc(var(--spacing-unit) / 2);
+      }
+      
+      .focused-comment {
+        border-color: var(--focus-border-color);
+        border-width: 2px;
+        padding: calc(var(--spacing-unit) - 1px) calc(var(--spacing-unit) * 1.5 - 1px); /* Adjust padding for border */
+      }
+      
+      label {
+        display: block;
+        margin-top: calc(var(--spacing-unit) * 1.5);
+        font-weight: 500;
+        font-size: 13px;
+        color: var(--on-surface-variant-color);
+      }
+
+      details {
+        border: 1px solid var(--border-color);
+        border-radius: var(--border-radius);
+        margin-bottom: calc(var(--spacing-unit) * 2);
+        background-color: var(--surface-color);
+      }
+      
+      summary {
+        font-weight: 500;
+        padding: var(--spacing-unit) calc(var(--spacing-unit) * 1.5);
+        cursor: pointer;
+        list-style: none; /* Remove default arrow */
+        position: relative;
+        color: var(--on-surface-variant-color);
+      }
+
+      summary::-webkit-details-marker {
+        display: none; /* Hide default arrow for Chrome/Safari */
+      }
+
+      summary::before {
+        /* Custom arrow */
+        content: '\e5c8'; /* Material icon name: keyboard_arrow_down */
+        font-family: 'Material Icons';
+        position: absolute;
+        right: calc(var(--spacing-unit) * 1.5);
+        top: 50%;
+        transform: translateY(-50%) rotate(0deg);
+        transition: transform 0.2s ease-in-out;
+        font-size: 20px;
+      }
+
+      details[open] summary::before {
+        transform: translateY(-50%) rotate(180deg);
+      }
+      
+      .settings-content {
+          padding: 0 calc(var(--spacing-unit) * 1.5) calc(var(--spacing-unit) * 1.5);
+          border-top: 1px solid var(--border-color);
+      }
+
+      small {
+        font-size: 12px;
+        color: var(--on-surface-variant-color);
+        display: block;
+        margin-top: calc(var(--spacing-unit) / 2);
+      }
     </style>
   </head>
   <body>
-    <h1>Document Analysis</h1>
+    <h1>Docopilot</h1>
 
-    <div>
-      <label for="apiKey">Gemini API Key:</label>
-      <input type="password" id="apiKey" style="width: 95%;">
-      <small>Need a key? <a href="https://ai.google.dev/gemini-api/docs/api-key" target="_blank">Get one here</a>.</small>
-    </div>
-
-    <div>
-        <label for="customPrompt">Analysis Prompt:</label>
-        <textarea id="customPrompt"></textarea>
-    </div>
+    <details>
+      <summary>Settings</summary>
+      <div class="settings-content">
+        <div>
+          <label for="apiKey">Gemini API Key:</label>
+          <input type="password" id="apiKey" style="width: calc(100% - 16px);">
+          <small>Need a key? <a href="https://ai.google.dev/gemini-api/docs/api-key" target="_blank">Get one here</a>.</small>
+        </div>
+    
+        <div>
+            <label for="customPrompt">Analysis Prompt:</label>
+            <textarea id="customPrompt"></textarea>
+        </div>
+      </div>
+    </details>
 
     <button id="analyzeButton">Analyze for Comments</button>
 
@@ -143,11 +302,10 @@
          }
 
          // Render comments
-         let html = '<h2>Generated Comments:</h2>';
+         let html = '<h2>Comments:</h2>'; // Changed title
          comments.forEach((comment, index) => {
            const commentId = `comment-${index}`;
            html += `<div class="comment-block" data-quote="${escapeHtml(comment.quote)}" id="${commentId}">`;
-           html += `<div class="comment-quote">${escapeHtml(comment.quote)}</div>`;
            html += `<div class="comment-text">${escapeHtml(comment.comment)}</div>`;
            html += '</div>';
          });

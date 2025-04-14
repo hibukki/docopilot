@@ -9,7 +9,7 @@
  */
 function onOpen(e) {
   DocumentApp.getUi()
-      .createMenu('My Add-on')
+      .createMenu('Docopilot')
       .addItem('Show sidebar', 'showSidebar')
       .addToUi();
 }
