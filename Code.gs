@@ -24,6 +24,7 @@ function showSidebar() {
 }
 
 const HIGHLIGHT_COLOR = '#FFF8C4'; // Light yellow/orange
+const FOCUSED_HIGHLIGHT_COLOR = '#FFD54F'; // A slightly more orange/yellow, similar to Docs focus
 
 /**
  * Gets the text content of the body of the current document.
@@ -134,53 +135,89 @@ function getGeminiComments(finalPrompt, apiKey) {
 
 /**
  * Highlights the specified text segments (quotes) in the document.
+ * Optionally highlights one specific quote with a different focus color.
  *
  * @param {Array<string>} quotesToHighlight An array of quote strings to find and highlight.
+ * @param {string} [quoteInFocus] Optional. The specific quote string to highlight with the focus color.
  */
-function highlightCommentsInDoc(quotesToHighlight) {
+function highlightCommentsInDoc(quotesToHighlight, quoteInFocus = null) {
   try {
     const doc = DocumentApp.getActiveDocument();
     const body = doc.getBody();
 
-    // Clear existing highlights first
-    body.editAsText().setBackgroundColor(null);
+    // 1. Clear existing highlights
+    console.log("Clearing existing highlights...");
+    try {
+      let searchResult = body.findText('.*');
+      while (searchResult) {
+        const textElement = searchResult.getElement().asText();
+        if (textElement) {
+          const startOffset = searchResult.getStartOffset();
+          const endOffset = searchResult.getEndOffsetInclusive(); 
+          textElement.setBackgroundColor(startOffset, endOffset, null);
+        }
+        searchResult = body.findText('.*', searchResult);
+      }
+      console.log("Finished clearing highlights.");
+    } catch (e) {
+        console.error("Error during highlight clearing: " + e.stack);
+    }
 
     if (!quotesToHighlight || quotesToHighlight.length === 0) {
       console.log("No quotes provided for highlighting.");
       return;
     }
 
-    console.log(`Attempting to highlight ${quotesToHighlight.length} quotes.`);
-    const bodyText = body.getText();
-
+    // 2. Highlight all quotes with the standard color
+    console.log(`Attempting to highlight ${quotesToHighlight.length} quotes with standard color.`);
     quotesToHighlight.forEach((quote, index) => {
       if (!quote || typeof quote !== 'string' || quote.trim() === '') {
           console.warn(`Skipping quote index ${index} due to empty or invalid value.`);
           return;
       }
+      // Avoid double-highlighting the focused quote here if it's in the main list
+      if (quote === quoteInFocus) return;
 
-      let searchResult = body.findText(quote);
-      let count = 0;
-      while (searchResult !== null) {
-        const element = searchResult.getElement();
-        const start = searchResult.getStartOffset();
-        const end = searchResult.getEndOffsetInclusive();
-
-        if (element.asText()) {
-          element.asText().setBackgroundColor(start, end, HIGHLIGHT_COLOR);
-          count++;
-        }
-        searchResult = body.findText(quote, searchResult);
-      }
-      if (count === 0) {
-          console.warn(`Quote not found in document: "${quote}"`);
-      }
+      applyHighlight(body, quote, HIGHLIGHT_COLOR);
     });
+
+    // 3. Highlight the specific focused quote with the focus color
+    if (quoteInFocus) {
+        console.log(`Attempting to highlight focused quote: "${quoteInFocus}"`);
+        applyHighlight(body, quoteInFocus, FOCUSED_HIGHLIGHT_COLOR);
+    }
+
     console.log("Highlighting process completed.");
   } catch (e) {
     console.error("Error highlighting quotes in document: " + e.stack);
     throw new Error("Failed to highlight quotes in document: " + e.message);
   }
+}
+
+/**
+ * Helper function to apply background color to all occurrences of a text quote.
+ * @param {Body} body The document body element.
+ * @param {string} quote The text to find.
+ * @param {string} color The background color to apply.
+ */
+function applyHighlight(body, quote, color) {
+    if (!quote || !color) return;
+    let searchResult = body.findText(quote);
+    let count = 0;
+    while (searchResult !== null) {
+        const element = searchResult.getElement();
+        const start = searchResult.getStartOffset();
+        const end = searchResult.getEndOffsetInclusive();
+
+        if (element.asText()) {
+            element.asText().setBackgroundColor(start, end, color);
+            count++;
+        }
+        searchResult = body.findText(quote, searchResult);
+    }
+    if (count === 0) {
+        console.warn(`Text not found for applying highlight (${color}): "${quote}"`);
+    }
 }
 
 /**

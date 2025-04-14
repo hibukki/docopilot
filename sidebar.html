@@ -38,6 +38,7 @@
 
     <script>
       const HIGHLIGHT_COLOR = '#FFF8C4'; // Define on client-side too
+      const FOCUSED_HIGHLIGHT_COLOR = '#FFD54F'; // Define on client-side too
       const DOC_TEXT_PLACEHOLDER = '{docText}';
       const defaultPrompt = `Please review the following document text and provide 2-5 constructive comments. For each comment, identify the exact phrase or sentence from the text that the comment refers to. Present your output STRICTLY as a JSON array of objects, where each object has a "quote" key (containing the exact text phrase) and a "comment" key (containing your feedback). Do not include any text outside of the JSON array.\n\nExample format:\n[\n  {\n    "quote": "This is a sentence to comment on.",\n    "comment": "This sentence could be clearer."
   },\n  {\n    "quote": "Another phrase needing feedback.",\n    "comment": "Consider rephrasing this part."
@@ -124,7 +125,7 @@
          console.log("Comments received:", comments);
          currentComments = comments; // Store comments for later use
          currentlyFocusedCommentId = null; // Reset focus
-         clearFocus(); // Clear visual focus
+         clearSidebarFocus(); // Clear visual focus
 
          if (!comments || comments.length === 0) {
            resultsDiv.innerHTML = '<p>No comments were generated.</p>';
@@ -136,7 +137,6 @@
          let html = '<h2>Generated Comments:</h2>';
          comments.forEach((comment, index) => {
            const commentId = `comment-${index}`;
-           // Use commentId for the div id
            html += `<div class="comment-block" data-quote="${escapeHtml(comment.quote)}" id="${commentId}">`;
            html += `<div class="comment-quote">${escapeHtml(comment.quote)}</div>`;
            html += `<div class="comment-text">${escapeHtml(comment.comment)}</div>`;
@@ -144,13 +144,17 @@
          });
          resultsDiv.innerHTML = html;
 
-         // After rendering, extract quotes and request highlighting
-         const quotesToHighlight = comments.map(c => c.quote);
-         console.log("Requesting document highlighting for quotes:", quotesToHighlight);
-         google.script.run
-            .withSuccessHandler(onHighlightSuccess)
-            .withFailureHandler(onHighlightError)
-            .highlightCommentsInDoc(quotesToHighlight); // Pass only quotes
+         // Add click listeners AFTER rendering
+         comments.forEach((_, index) => {
+           const commentId = `comment-${index}`;
+           const element = document.getElementById(commentId);
+           if (element) {
+             element.addEventListener('click', () => setCommentFocus(commentId));
+           }
+         });
+
+         // Initial highlighting (no focus)
+         setCommentFocus(null);
       }
 
       function onHighlightSuccess() {
@@ -204,7 +208,11 @@
           console.log("Stopping focus polling.");
           clearInterval(pollingInterval);
           pollingInterval = null;
-          clearFocus(); // Clear focus when stopping polling
+          clearSidebarFocus(); // Clear focus when stopping polling
+          // When polling stops, ensure focus is cleared in doc too
+          if (currentlyFocusedCommentId) {
+            setCommentFocus(null); 
+          }
         }
       }
 
@@ -245,37 +253,53 @@
         }
 
         // Update focus based on whether a comment was found
-        if (foundCommentId) {
-            if (currentlyFocusedCommentId !== foundCommentId) {
-                console.log(`Polling: Setting focus to ${foundCommentId}`);
-                setFocus(foundCommentId);
-            }
-        } else {
-            if (currentlyFocusedCommentId !== null) {
-                console.log("Polling: Clearing focus as no matching quote found for cursor position.");
-                clearFocus();
-            }
+        if (currentlyFocusedCommentId !== foundCommentId) {
+             setCommentFocus(foundCommentId); // Call the central focus function
         }
       }
 
-      function setFocus(commentId) {
-        clearFocus(); // Clear previous focus first
-        const newElement = document.getElementById(commentId);
-        if (newElement) {
-            console.log("Focusing comment:", commentId);
-            newElement.classList.add('focused-comment');
-            // Optional: Scroll into view
-            newElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            currentlyFocusedCommentId = commentId;
-        } else {
-            console.warn("setFocus: Could not find comment block with id:", commentId);
-            currentlyFocusedCommentId = null;
+      /**
+       * Central function to set the focus on a specific comment (or clear focus).
+       * Handles both sidebar UI and document highlighting.
+       * @param {string | null} commentId The ID of the comment to focus, or null to clear focus.
+       */
+      function setCommentFocus(commentId) {
+        console.log(`Setting focus. Target comment ID: ${commentId}`);
+        const previouslyFocusedId = currentlyFocusedCommentId;
+
+        // 1. Update Sidebar UI Focus
+        clearSidebarFocus(); // Clear previous sidebar visual focus
+        let quoteToFocus = null;
+        if (commentId) {
+            const newElement = document.getElementById(commentId);
+            if (newElement) {
+                console.log("Focusing sidebar element:", commentId);
+                newElement.classList.add('focused-comment');
+                newElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                currentlyFocusedCommentId = commentId;
+                // Retrieve the quote text associated with this comment ID for highlighting
+                quoteToFocus = newElement.getAttribute('data-quote');
+            } else {
+                console.warn("setCommentFocus: Could not find comment block with id:", commentId);
+                currentlyFocusedCommentId = null;
+            }
+        }
+
+        // 2. Update Document Highlighting (only if focus changed or needs clearing)
+        // Avoid redundant calls if the focus target is the same or already null
+        if (currentlyFocusedCommentId !== previouslyFocusedId || !commentId) {
+             console.log(`Requesting document highlight update. Focused quote: "${quoteToFocus || 'None'}"`);
+            const allQuotes = currentComments.map(c => c.quote);
+            google.script.run
+                .withFailureHandler(onHighlightError) // Reuse error handler
+                .highlightCommentsInDoc(allQuotes, quoteToFocus); // Pass the specific quote to focus
         }
       }
 
-      function clearFocus() {
+      // Renamed from clearFocus for clarity
+      function clearSidebarFocus() {
          if (currentlyFocusedCommentId) {
-             console.log("Clearing focus from:", currentlyFocusedCommentId);
+             console.log("Clearing sidebar focus from:", currentlyFocusedCommentId);
              const oldElement = document.getElementById(currentlyFocusedCommentId);
              if (oldElement) {
                 oldElement.classList.remove('focused-comment');
