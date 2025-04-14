@@ -141,7 +141,6 @@ function getGeminiComments(finalPrompt, apiKey) {
  * @param {string} [quoteInFocus] Optional. The specific quote string to highlight with the focus color.
  */
 function highlightCommentsInDoc(quotesToHighlight, quoteInFocus = null) {
-  let focusedRange = null;
   try {
     const doc = DocumentApp.getActiveDocument();
     const body = doc.getBody();
@@ -177,27 +176,16 @@ function highlightCommentsInDoc(quotesToHighlight, quoteInFocus = null) {
           return;
       }
       if (quote === quoteInFocus) return;
-      applyHighlight(doc, body, quote, HIGHLIGHT_COLOR);
+      applyHighlight(body, quote, HIGHLIGHT_COLOR);
     });
 
     // 3. Highlight the specific focused quote with the focus color
     if (quoteInFocus) {
         console.log(`Attempting to highlight focused quote: "${quoteInFocus}"`);
-        focusedRange = applyHighlight(doc, body, quoteInFocus, FOCUSED_HIGHLIGHT_COLOR, true);
+        applyHighlight(body, quoteInFocus, FOCUSED_HIGHLIGHT_COLOR);
     }
 
-    // 4. Set selection to the focused quote range (if found)
-    if (focusedRange) {
-        console.log("Setting document selection to the focused quote range.");
-        try {
-            doc.setSelection(focusedRange);
-        } catch (e) {
-             console.error("Error setting selection: " + e.stack);
-             // Log the error but don't fail the whole operation
-        }
-    }
-
-    console.log("Highlighting and selection process completed.");
+    console.log("Highlighting process completed.");
   } catch (e) {
     console.error("Error highlighting quotes in document: " + e.stack);
     throw new Error("Failed to highlight quotes in document: " + e.message);
@@ -206,17 +194,12 @@ function highlightCommentsInDoc(quotesToHighlight, quoteInFocus = null) {
 
 /**
  * Helper function to apply background color to all occurrences of a text quote.
- * Optionally captures the Range of the first occurrence.
- * @param {Document} doc The active document object.
  * @param {Body} body The document body element.
  * @param {string} quote The text to find.
  * @param {string} color The background color to apply.
- * @param {boolean} [captureFirstRange=false] Whether to capture and return the Range of the first match.
- * @return {Range|null} The Range of the first match if captureFirstRange is true, otherwise null.
  */
-function applyHighlight(doc, body, quote, color, captureFirstRange = false) {
-    let firstRange = null;
-    if (!quote || !color) return firstRange;
+function applyHighlight(body, quote, color) {
+    if (!quote || !color) return;
     let searchResult = body.findText(quote);
     let count = 0;
     while (searchResult !== null) {
@@ -227,24 +210,48 @@ function applyHighlight(doc, body, quote, color, captureFirstRange = false) {
         if (element.asText()) {
             element.asText().setBackgroundColor(start, end, color);
             count++;
-            if (captureFirstRange && firstRange === null) {
-                try {
-                  const rangeBuilder = doc.newRange();
-                  rangeBuilder.addElement(element, start, end);
-                  firstRange = rangeBuilder.build();
-                  console.log(`Captured first range for quote: "${quote}"`);
-                } catch (e) {
-                  console.error(`Error building range for quote "${quote}": ${e.stack}`);
-                  // Continue without the range if building fails
-                }
-            }
         }
         searchResult = body.findText(quote, searchResult);
     }
     if (count === 0) {
         console.warn(`Text not found for applying highlight (${color}): "${quote}"`);
     }
-    return firstRange;
+}
+
+/**
+ * Scrolls the document view to the first occurrence of the specified quote.
+ * @param {string} quote The text quote to find and scroll to.
+ */
+function scrollToQuote(quote) {
+  if (!quote || typeof quote !== 'string' || quote.trim() === '') {
+    console.log("scrollToQuote: Invalid quote provided.");
+    return; 
+  }
+  console.log(`scrollToQuote: Attempting to find and scroll to "${quote}"`);
+  try {
+    const doc = DocumentApp.getActiveDocument();
+    const body = doc.getBody();
+    const searchResult = body.findText(quote); // Find first occurrence
+
+    if (searchResult) {
+        const element = searchResult.getElement();
+        const start = searchResult.getStartOffset();
+        const end = searchResult.getEndOffsetInclusive();
+        
+        // Build the range for the first occurrence
+        const rangeBuilder = doc.newRange();
+        rangeBuilder.addElement(element, start, end);
+        const rangeToSelect = rangeBuilder.build();
+        
+        console.log("scrollToQuote: Found quote, setting selection.");
+        doc.setSelection(rangeToSelect);
+    } else {
+        console.warn(`scrollToQuote: Quote not found in document: "${quote}"`);
+    }
+  } catch (e) {
+      console.error(`scrollToQuote: Error finding/setting selection for "${quote}": ${e.stack}`);
+      // Don't throw, just log the error
+  }
 }
 
 /**

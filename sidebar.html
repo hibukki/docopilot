@@ -315,11 +315,21 @@
            const commentId = `comment-${index}`;
            const element = document.getElementById(commentId);
            if (element) {
-             element.addEventListener('click', () => setCommentFocus(commentId));
+             // Call setCommentFocus AND trigger scroll on click
+             element.addEventListener('click', () => {
+                setCommentFocus(commentId);
+                const quoteToScroll = element.getAttribute('data-quote');
+                if (quoteToScroll) {
+                  console.log("Click detected, requesting scroll to:", quoteToScroll);
+                  google.script.run
+                    .withFailureHandler(logScrollError) // Add a simple error handler
+                    .scrollToQuote(quoteToScroll);
+                }
+             });
            }
          });
 
-         // Initial highlighting (no focus)
+         // Initial highlighting (no focus or scroll)
          setCommentFocus(null);
       }
 
@@ -450,14 +460,13 @@
             }
         }
 
-        // 2. Update Document Highlighting 
+        // 2. Update Document Highlighting ONLY (No scrolling here)
         if (currentlyFocusedCommentId !== previouslyFocusedId || !commentId) {
              console.log(`Requesting document highlight update. Focused quote: "${quoteToFocus || 'None'}"`);
             const allQuotes = currentComments.map(c => c.quote);
             google.script.run
-                .withSuccessHandler(onHighlightSuccess)
-                .withFailureHandler(onHighlightError)
-                .highlightCommentsInDoc(allQuotes, quoteToFocus);
+                .withFailureHandler(onHighlightError) // Highlight error handler
+                .highlightCommentsInDoc(allQuotes, quoteToFocus); // Just highlight
         }
       }
 
@@ -475,6 +484,10 @@
 
       function logPollingError(error) {
           console.warn("Polling Error (likely transient):", error);
+      }
+
+      function logScrollError(error) {
+          console.error("Error during scrollToQuote call:", error);
       }
 
       // --- Utility Functions --- 
