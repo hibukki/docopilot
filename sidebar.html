@@ -234,6 +234,15 @@
 
       startPolling();
 
+      // --- Helper Functions --- 
+      function getApiKeyInputValue() {
+        return document.getElementById('apiKey').value;
+      }
+
+      function getPromptInputValue() {
+        return document.getElementById('customPrompt').value;
+      }
+
       // --- Initial Population --- 
       function populateApiKey(savedKey) {
         if (savedKey) {
@@ -264,8 +273,8 @@
 
       // --- Button Actions / Event Handlers --- 
       function analyzeDocument() {
-        const apiKey = document.getElementById('apiKey').value;
-        const customPromptTemplate = document.getElementById('customPrompt').value;
+        const apiKey = getApiKeyInputValue();
+        const customPromptTemplate = getPromptInputValue();
         const resultsDiv = document.getElementById('results');
         const analyzeButton = document.getElementById('analyzeButton');
 
@@ -282,10 +291,7 @@
         analyzeButton.disabled = true;
         resultsDiv.innerHTML = '<p>Fetching document content...</p>';
 
-        // Save the key and prompt when analysis is attempted
-        // NOTE: Prompt is only saved if user explicitly clicked "Save" or if it matches default
-        // Let's change this: Save prompt on Analyze IF it's different from loaded (or handled by save button)
-        // For simplicity now, we rely on the explicit Save button or Reset button.
+        // Save the key (prompt is saved via explicit button)
         if (apiKey) {
            console.log("Attempting to save API Key...");
            google.script.run.saveApiKey(apiKey);
@@ -334,8 +340,8 @@
 
       function handleDocContent(docContent) {
         console.log("Document Content Received (first 100 chars):", docContent.substring(0, 100));
-        const apiKey = document.getElementById('apiKey').value;
-        const customPromptTemplate = document.getElementById('customPrompt').value;
+        const apiKey = getApiKeyInputValue();
+        const customPromptTemplate = getPromptInputValue();
         const resultsDiv = document.getElementById('results');
         resultsDiv.innerHTML = '<p>Analyzing content with Gemini...</p>';
 
@@ -522,13 +528,6 @@
             console.log("handleAutoAnalysis: Received null/undefined content. Skipping.");
             return;
         }
-        if (lastDocContent === null) {
-            // First time fetching content, just store it
-            console.log("handleAutoAnalysis: Storing initial document content.");
-            lastDocContent = docContent;
-            lastChangeTimestamp = Date.now(); // Set initial timestamp
-            return;
-        }
 
         if (docContent !== lastDocContent) {
             console.log("handleAutoAnalysis: Document content changed.");
@@ -546,10 +545,10 @@
                 console.log("handleAutoAnalysis: Debounce delay elapsed. Triggering analysis.");
                 analysisDebounceTimer = null; // Clear the timer variable
                 // Check API key etc. before triggering
-                const apiKey = document.getElementById('apiKey').value;
-                const customPromptTemplate = document.getElementById('customPrompt').value;
+                const apiKey = getApiKeyInputValue();
+                const customPromptTemplate = getPromptInputValue();
                 if (apiKey && customPromptTemplate) {
-                    triggerAnalysis(); // Call a separate trigger function
+                    getCommentsFromLLM(); // Call the trigger function
                 } else {
                     console.log("handleAutoAnalysis: Skipping auto-analysis due to missing API key or prompt.");
                 }
@@ -562,28 +561,17 @@
         }
       }
 
-      // Function to trigger the actual analysis (similar to button click but without UI feedback like disabling button)
-      function triggerAnalysis() {
-          console.log("triggerAnalysis: Starting auto-analysis...");
-          // Essentially reuse the core logic from analyzeDocument but without UI disables/messages
-          const apiKey = document.getElementById('apiKey').value;
-          const customPromptTemplate = document.getElementById('customPrompt').value;
+      function getCommentsFromLLM() {
+          console.log("getCommentsFromLLM: Starting analysis..."); // Renamed log
+          const apiKey = getApiKeyInputValue(); // Use helper
+          const customPromptTemplate = getPromptInputValue(); // Use helper
           const resultsDiv = document.getElementById('results');
-          // Maybe add a subtle loading indicator?
           // resultsDiv.innerHTML = '<p>Auto-analyzing...</p>'; 
 
-          // Save prompt if needed (or rely on explicit save button)
-          if (customPromptTemplate && customPromptTemplate !== loadedPromptValue) {
-             console.log("triggerAnalysis: Saving changed prompt before auto-analysis...");
-             google.script.run.saveUserPrompt(customPromptTemplate);
-             loadedPromptValue = customPromptTemplate; // Update baseline
-             handlePromptInputChange(); // Ensure save button hides
-          }
-
           google.script.run
-            .withSuccessHandler(handleDocContent) // Reuse existing handlers
+            .withSuccessHandler(handleDocContent)
             .withFailureHandler(handleError)
-            .getDocumentContent(); // Need content again to pass to Gemini
+            .getDocumentContent();
       }
 
       /**
@@ -592,10 +580,23 @@
        * @param {string | null} commentId The ID of the comment to focus, or null to clear focus.
        */
       function setCommentFocus(commentId) {
-        console.log(`Setting focus. Target comment ID: ${commentId}`);
+        console.log(`setCommentFocus: Target comment ID: ${commentId}`);
         const previouslyFocusedId = currentlyFocusedCommentId;
 
-        // 1. Update Sidebar UI Focus
+        const quoteToFocus = updateSidebarFocusUI(commentId);
+
+        // Update Document Highlighting ONLY if focus actually changed
+        if (currentlyFocusedCommentId !== previouslyFocusedId) {
+            updateDocumentHighlighting(quoteToFocus);
+        }
+      }
+      
+      /**
+       * Updates the sidebar UI to show the focused comment.
+       * @param {string | null} commentId The ID of the comment to focus, or null.
+       * @returns {string | null} The quote text associated with the focused comment, or null.
+       */
+      function updateSidebarFocusUI(commentId) {
         clearSidebarFocus(); // Clear previous sidebar visual focus
         let quoteToFocus = null;
         if (commentId) {
@@ -605,25 +606,28 @@
                 newElement.classList.add('focused-comment');
                 newElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 currentlyFocusedCommentId = commentId;
-                // Retrieve the quote text associated with this comment ID for highlighting
                 quoteToFocus = newElement.getAttribute('data-quote');
             } else {
-                console.warn("setCommentFocus: Could not find comment block with id:", commentId);
+                console.warn("updateSidebarFocusUI: Could not find comment block with id:", commentId);
                 currentlyFocusedCommentId = null;
             }
         }
-
-        // 2. Update Document Highlighting ONLY (No scrolling here)
-        if (currentlyFocusedCommentId !== previouslyFocusedId || !commentId) {
-             console.log(`Requesting document highlight update. Focused quote: "${quoteToFocus || 'None'}"`);
-            const allQuotes = currentComments.map(c => c.quote);
-            google.script.run
-                .withFailureHandler(onHighlightError) // Highlight error handler
-                .highlightCommentsInDoc(allQuotes, quoteToFocus); // Just highlight
-        }
+        return quoteToFocus;
       }
 
-      // Renamed from clearFocus for clarity
+      /**
+       * Calls the server to update the document highlighting based on the focused quote.
+       * @param {string | null} quoteToFocus The quote to highlight with focus color, or null.
+       */
+      function updateDocumentHighlighting(quoteToFocus) {
+          console.log(`Requesting document highlight update. Focused quote: "${quoteToFocus || 'None'}"`);
+          const allQuotes = currentComments.map(c => c.quote);
+          google.script.run
+              .withFailureHandler(onHighlightError) // Highlight error handler
+              .highlightCommentsInDoc(allQuotes, quoteToFocus); // Just highlight
+      }
+
+      // Renamed from clearFocus for clarity -> Now clearSidebarFocus
       function clearSidebarFocus() {
          if (currentlyFocusedCommentId) {
              console.log("Clearing sidebar focus from:", currentlyFocusedCommentId);
