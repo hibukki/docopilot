@@ -197,7 +197,6 @@
     <button id="analyzeButton">Analyze for Comments</button>
 
     <div id="commentsContainer">
-      <!-- REMOVED Comment: Comments will be displayed here -->
       <p>Enter your API key and click the button to analyze.</p>
     </div>
 
@@ -219,7 +218,7 @@
         .getApiKey();
       google.script.run
         .withSuccessHandler(populatePrompt)
-        .withFailureHandler(logPromptError) // REMOVED: Add error handler for prompt
+        .withFailureHandler(logPromptError)
         .getUserOrDefaultPrompt(); 
 
       let currentComments = [];
@@ -227,10 +226,10 @@
       let pollingInterval = null;
       let lastProcessedCursorState = null;
       let loadedPromptValue = ''; 
-      let lastDocContent = null;        // REMOVED: Store last known document content
-      let lastChangeTimestamp = 0;    // REMOVED: Timestamp of last detected content change
-      let analysisDebounceTimer = null; // REMOVED: Timer for debouncing auto-analysis
-      const AUTO_ANALYSIS_DELAY = 1500; // REMOVED: Wait 1.5 seconds after last change
+      let lastDocContent = null;        
+      let lastChangeTimestamp = 0;    
+      let analysisDebounceTimer = null; 
+      const AUTO_ANALYSIS_DELAY = 1500; 
 
       startPolling();
 
@@ -357,7 +356,7 @@
         google.script.run
           .withSuccessHandler(displayComments)
           .withFailureHandler(handleError)
-          .getGeminiComments(finalPrompt, apiKey); // REMOVED: Pass final prompt
+          .getGeminiComments(finalPrompt, apiKey); 
       }
 
       function displayComments(comments) {
@@ -415,8 +414,7 @@
       function onHighlightError(error) {
         console.error("Highlighting Error:", error);
         // Maybe show a non-fatal error to the user
-        // document.getElementById('results').innerHTML += '<p style="color: orange;">Could not highlight comments in document.</p>';
-        // Still start polling even if highlighting fails?
+        // document.getElementById('commentsContainer').innerHTML += '<p style="color: orange;">Could not highlight comments in document.</p>';
       }
 
       function handleError(error) {
@@ -459,14 +457,10 @@
       }
 
       function handlePollingResults(cursorState, docContent) {
-          // REMOVED: 1. Handle Cursor Focus Update (as before)
           handleCursorFocus(cursorState);
-
-          // REMOVED: 2. Handle Auto-Analysis based on Document Content Change
           handleAutoAnalysis(docContent);
       }
 
-      // REMOVED: Renamed from updateFocus to be more specific
       function handleCursorFocus(cursorState) { 
         console.log("handleCursorFocus: Processing state:", cursorState);
 
@@ -529,6 +523,13 @@
             return;
         }
 
+        if (lastDocContent === null) {
+            console.log("handleAutoAnalysis: Storing initial document content.");
+            lastDocContent = docContent;
+            lastChangeTimestamp = Date.now(); // Set initial timestamp
+            return;
+        }
+
         if (docContent !== lastDocContent) {
             console.log("handleAutoAnalysis: Document content changed.");
             lastDocContent = docContent;
@@ -548,7 +549,7 @@
                 const apiKey = getApiKeyInputValue();
                 const customPromptTemplate = getPromptInputValue();
                 if (apiKey && customPromptTemplate) {
-                    getCommentsFromLLM(); // REMOVED: Call the trigger function
+                    getCommentsFromLLM(); 
                 } else {
                     console.log("handleAutoAnalysis: Skipping auto-analysis due to missing API key or prompt.");
                 }
@@ -556,17 +557,14 @@
 
         } else {
             console.log("handleAutoAnalysis: Document content unchanged.");
-            // Optional: Could add logic here to check if the delay has passed *without* a timer already set,
-            // but the current logic with resetting the timer on change is simpler.
         }
       }
 
       function getCommentsFromLLM() {
-          console.log("getCommentsFromLLM: Starting analysis..."); // REMOVED: Renamed log
-          const apiKey = getApiKeyInputValue(); // REMOVED: Use helper
-          const customPromptTemplate = getPromptInputValue(); // REMOVED: Use helper
-          const resultsDiv = document.getElementById('commentsContainer'); // Updated ID
-          // REMOVED: resultsDiv.innerHTML = '<p>Auto-analyzing...</p>'; 
+          console.log("getCommentsFromLLM: Starting analysis..."); 
+          const apiKey = getApiKeyInputValue(); 
+          const customPromptTemplate = getPromptInputValue(); 
+          const resultsDiv = document.getElementById('commentsContainer'); 
 
           google.script.run
             .withSuccessHandler(handleDocContent)
@@ -627,7 +625,6 @@
               .highlightCommentsInDoc(allQuotes, quoteToFocus); // Just highlight
       }
 
-      // REMOVED: Renamed from clearFocus for clarity -> Now clearSidebarFocus
       function clearSidebarFocus() {
          if (currentlyFocusedCommentId) {
              console.log("Clearing sidebar focus from:", currentlyFocusedCommentId);
@@ -666,7 +663,7 @@
       // Utility function to escape quotes for CSS selectors
       function escapeCssSelector(str) {
         if (!str) return '';
-        return str.replace(/(["'\!#$%&()*+,./:;<=>?@[\]^`{|}~])/g, '\$1');
+        return str.replace(/(['"\\!#$%&()*+,./:;<=>?@[\]^`{|}~])/g, '\\$1');
       }
 
     </script>
