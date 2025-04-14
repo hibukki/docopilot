@@ -1,0 +1,18 @@
+Please review the following document text and provide 2-5 constructive comments. For each comment, identify the exact phrase or sentence from the text that the comment refers to. Present your output STRICTLY as a JSON array of objects, where each object has a "quote" key (containing the exact text phrase) and a "comment" key (containing your feedback). Do not include any text outside of the JSON array.
+
+Example format:
+[
+  {
+    "quote": "This is a sentence to comment on.",
+    "comment": "This sentence could be clearer."
+  },
+  {
+    "quote": "Another phrase needing feedback.",
+    "comment": "Consider rephrasing this part."
+  }
+]
+
+Document Text:
+---
+{docText}
+--- 

@@ -175,14 +175,19 @@
     <details>
       <summary>Settings</summary>
       <div class="settings-content">
+        <!-- API Key Section -->
         <div>
           <label for="apiKey">Gemini API Key:</label>
           <input type="password" id="apiKey" style="width: calc(100% - 16px);">
           <small>Need a key? <a href="https://ai.google.dev/gemini-api/docs/api-key" target="_blank">Get one here</a>.</small>
         </div>
     
+        <!-- Prompt Section -->
         <div>
-            <label for="customPrompt">Analysis Prompt:</label>
+            <label for="customPrompt">
+                Analysis Prompt:
+                <button id="resetPromptButton" title="Reset to default prompt" style="float: right; background: none; border: none; color: var(--primary-color); cursor: pointer; padding: 0; font-size: 12px; margin-top: -2px;">(Reset)</button>
+            </label>
             <textarea id="customPrompt"></textarea>
         </div>
       </div>
@@ -196,20 +201,23 @@
     </div>
 
     <script>
-      const HIGHLIGHT_COLOR = '#FFF8C4'; // Define on client-side too
-      const FOCUSED_HIGHLIGHT_COLOR = '#FFD54F'; // Define on client-side too
+      const HIGHLIGHT_COLOR = '#FFF8C4';
+      const FOCUSED_HIGHLIGHT_COLOR = '#FFD54F';
       const DOC_TEXT_PLACEHOLDER = '{docText}';
-      const defaultPrompt = `Please review the following document text and provide 2-5 constructive comments. For each comment, identify the exact phrase or sentence from the text that the comment refers to. Present your output STRICTLY as a JSON array of objects, where each object has a "quote" key (containing the exact text phrase) and a "comment" key (containing your feedback). Do not include any text outside of the JSON array.\n\nExample format:\n[\n  {\n    "quote": "This is a sentence to comment on.",\n    "comment": "This sentence could be clearer."
-  },\n  {\n    "quote": "Another phrase needing feedback.",\n    "comment": "Consider rephrasing this part."
-  }\n]\n\nDocument Text:\n---\n${DOC_TEXT_PLACEHOLDER}\n---`;
 
-      document.getElementById('customPrompt').value = defaultPrompt;
+      // Initialization
       document.getElementById('analyzeButton').addEventListener('click', analyzeDocument);
+      document.getElementById('resetPromptButton').addEventListener('click', resetPromptToDefault);
 
+      // Load initial state from server
       google.script.run
         .withSuccessHandler(populateApiKey)
         .withFailureHandler(logInitialApiKeyError)
         .getApiKey();
+      google.script.run
+        .withSuccessHandler(populatePrompt)
+        .withFailureHandler(logPromptError) // Add error handler for prompt
+        .getUserOrDefaultPrompt(); 
 
       let currentComments = [];
       let currentlyFocusedCommentId = null;
@@ -218,6 +226,7 @@
 
       startPolling();
 
+      // --- Initial Population --- 
       function populateApiKey(savedKey) {
         if (savedKey) {
           console.log("Found saved API key, populating input.");
@@ -227,11 +236,22 @@
         }
       }
 
+      function populatePrompt(promptText) {
+        console.log("Populating prompt text area.");
+        document.getElementById('customPrompt').value = promptText;
+      }
+
       function logInitialApiKeyError(error) {
         console.error("Error getting saved API key on load:", error);
         // Optional: Display a message to the user if needed
       }
 
+      function logPromptError(error) {
+          console.error("Error getting user/default prompt on load:", error);
+          // Maybe display a fallback or default directly in the textarea
+      }
+
+      // --- Button Actions --- 
       function analyzeDocument() {
         const apiKey = document.getElementById('apiKey').value;
         const customPromptTemplate = document.getElementById('customPrompt').value;
@@ -251,16 +271,30 @@
         analyzeButton.disabled = true;
         resultsDiv.innerHTML = '<p>Fetching document content...</p>';
 
-        // Save the key when analysis is attempted (if valid)
+        // Save the key and prompt when analysis is attempted
         if (apiKey) {
-           console.log("Attempting to save API Key..."); // Add log for saving
+           console.log("Attempting to save API Key...");
            google.script.run.saveApiKey(apiKey);
+        }
+        if (customPromptTemplate) {
+            console.log("Attempting to save User Prompt...");
+            google.script.run.saveUserPrompt(customPromptTemplate);
         }
 
         google.script.run
           .withSuccessHandler(handleDocContent)
           .withFailureHandler(handleError)
           .getDocumentContent();
+      }
+
+      function resetPromptToDefault() {
+          console.log("Resetting prompt to default...");
+          google.script.run
+              .withSuccessHandler(populatePrompt) // Reuse populate function
+              .withFailureHandler(logPromptError)
+              .getDefaultPrompt();
+          // Also clear the saved user prompt property
+          google.script.run.saveUserPrompt(null); 
       }
 
       function handleDocContent(docContent) {

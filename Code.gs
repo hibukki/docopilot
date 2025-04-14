@@ -368,4 +368,77 @@ function getApiKey() {
     console.error("Error retrieving API Key: " + e.stack);
     return null; // Return null on error
   }
+}
+
+// -- Prompt Management --
+
+const USER_PROMPT_KEY = 'USER_ANALYSIS_PROMPT';
+let defaultPromptCache = null; // Cache for the default prompt
+
+/**
+ * Reads the default prompt text from the 'default_prompt.txt' file.
+ * Caches the result for efficiency.
+ * @return {string} The default prompt text.
+ */
+function getDefaultPrompt() {
+  if (defaultPromptCache === null) {
+    try {
+      // Use HtmlService to read a text file (common workaround in Apps Script)
+      const htmlOutput = HtmlService.createHtmlOutputFromFile('default_prompt.txt');
+      defaultPromptCache = htmlOutput.getContent();
+      console.log("Successfully read and cached default prompt.");
+    } catch (e) {
+      console.error("Error reading default_prompt.txt: " + e.stack);
+      // Fallback prompt if file reading fails
+      defaultPromptCache = "Please review the following document text and provide constructive comments. For each comment, identify the exact phrase or sentence from the text that the comment refers to. Present your output STRICTLY as a JSON array of objects, where each object has a \"quote\" key (containing the exact text phrase) and a \"comment\" key (containing your feedback).\n\nDocument Text:\n---\n{docText}\n---";
+    }
+  }
+  return defaultPromptCache;
+}
+
+/**
+ * Saves the user's custom analysis prompt to User Properties.
+ * @param {string} promptText The prompt text to save.
+ */
+function saveUserPrompt(promptText) {
+  try {
+    if (promptText && typeof promptText === 'string') {
+      // Avoid saving if it's exactly the default prompt to save space/quota
+      if (promptText === getDefaultPrompt()) {
+          PropertiesService.getUserProperties().deleteProperty(USER_PROMPT_KEY);
+          console.log("User prompt matches default, cleared saved property.");
+      } else {
+          PropertiesService.getUserProperties().setProperty(USER_PROMPT_KEY, promptText);
+          console.log("User prompt saved successfully.");
+      }
+    } else {
+      // Clear if invalid prompt is passed
+      PropertiesService.getUserProperties().deleteProperty(USER_PROMPT_KEY);
+      console.log("Cleared saved user prompt.");
+    }
+  } catch (e) {
+    console.error("Error saving user prompt: " + e.stack);
+  }
+}
+
+/**
+ * Retrieves the user's saved custom analysis prompt from User Properties.
+ * If no custom prompt is saved, returns the default prompt.
+ * @return {string} The saved or default prompt text.
+ */
+function getUserOrDefaultPrompt() {
+  let userPrompt = null;
+  try {
+    userPrompt = PropertiesService.getUserProperties().getProperty(USER_PROMPT_KEY);
+  } catch (e) {
+    console.error("Error retrieving user prompt: " + e.stack);
+  }
+  
+  if (userPrompt) {
+    console.log("Retrieved saved user prompt.");
+    return userPrompt;
+  } else {
+    console.log("No saved user prompt found, returning default.");
+    return getDefaultPrompt();
+  }
 } 
