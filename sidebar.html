@@ -195,12 +195,9 @@
 
         let foundCommentId = null;
 
-        if (cursorState && cursorState.bgColor === HIGHLIGHT_COLOR && cursorState.elementText && currentComments.length > 0) {
-            // Cursor is in a highlighted area with text content, try to find the specific comment
+        if (cursorState && cursorState.elementText && currentComments.length > 0) {
             const elementText = cursorState.elementText;
             const cursorOffset = cursorState.offset;
-
-            console.log(`Polling: Cursor in highlight. Offset: ${cursorOffset}, Element Text (start): ${elementText.substring(0, 50)}...`);
 
             for (let i = 0; i < currentComments.length; i++) {
                 const comment = currentComments[i];
@@ -208,35 +205,25 @@
                 let startIndex = -1;
                 let searchFrom = 0;
 
-                // Find all occurrences of the quote within the element text
                 while ((startIndex = elementText.indexOf(quote, searchFrom)) !== -1) {
                     const endIndex = startIndex + quote.length;
-                    console.log(`Polling: Checking quote "${quote}" found at index ${startIndex} (ends ${endIndex})`);
                     
-                    // Check if the cursor offset is within this quote occurrence
-                    // The cursor offset is 0-based. It's considered "within" if it's >= start and <= end.
-                    // If offset is 0, it's at the very beginning. If offset is length, it's after the last char.
                     if (cursorOffset >= startIndex && cursorOffset <= endIndex) {
-                        console.log(`Polling: Cursor offset ${cursorOffset} is within quote bounds [${startIndex}, ${endIndex}]. Match found!`);
+                        console.log(`Polling: Cursor offset ${cursorOffset} is within quote bounds [${startIndex}, ${endIndex}]. Match found for comment-${i}!`);
                         foundCommentId = `comment-${i}`;
-                        break; // Found the comment for this cursor position
+                        break;
                     }
-                    
-                    // Prepare for the next search iteration to find subsequent occurrences
                     searchFrom = startIndex + 1; 
                 }
-
                 if (foundCommentId) {
-                    break; // Exit the outer loop once a match is found
+                    break;
                 }
             }
             if (!foundCommentId) {
-                 console.log("Polling: Cursor in highlight, but couldn't match offset to a known quote within the element text.");
+                 console.log("Polling: Cursor position doesn't match any known quote bounds within the current text element.");
             }
-
         } else {
-            // Cursor is not in a highlighted area, or missing data
-            console.log("Polling: Cursor not in highlighted area or missing data.");
+            console.log("Polling: No cursor state, element text, or comments available for matching.");
         }
 
         // Update focus based on whether a comment was found
@@ -247,7 +234,7 @@
             }
         } else {
             if (currentlyFocusedCommentId !== null) {
-                console.log("Polling: Clearing focus.");
+                console.log("Polling: Clearing focus as no matching quote found for cursor position.");
                 clearFocus();
             }
         }
