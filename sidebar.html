@@ -48,7 +48,10 @@
       document.getElementById('analyzeButton').addEventListener('click', analyzeDocument);
 
       // Load saved API key on startup
-      google.script.run.withSuccessHandler(populateApiKey).getApiKey();
+      google.script.run
+        .withSuccessHandler(populateApiKey)
+        .withFailureHandler(logInitialApiKeyError)
+        .getApiKey();
 
       let currentComments = []; // Store the current comments with quotes
       let currentlyFocusedCommentId = null;
@@ -61,6 +64,11 @@
         } else {
           console.log("No saved API key found.");
         }
+      }
+
+      function logInitialApiKeyError(error) {
+        console.error("Error getting saved API key on load:", error);
+        // Optional: Display a message to the user if needed
       }
 
       function analyzeDocument() {
@@ -287,14 +295,14 @@
             }
         }
 
-        // 2. Update Document Highlighting (only if focus changed or needs clearing)
-        // Avoid redundant calls if the focus target is the same or already null
+        // 2. Update Document Highlighting 
         if (currentlyFocusedCommentId !== previouslyFocusedId || !commentId) {
              console.log(`Requesting document highlight update. Focused quote: "${quoteToFocus || 'None'}"`);
             const allQuotes = currentComments.map(c => c.quote);
             google.script.run
-                .withFailureHandler(onHighlightError) // Reuse error handler
-                .highlightCommentsInDoc(allQuotes, quoteToFocus); // Pass the specific quote to focus
+                .withSuccessHandler(onHighlightSuccess)
+                .withFailureHandler(onHighlightError)
+                .highlightCommentsInDoc(allQuotes, quoteToFocus);
         }
       }
 
