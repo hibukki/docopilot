@@ -19,7 +19,7 @@ function onOpen(e) {
  */
 function showSidebar() {
   const html = HtmlService.createHtmlOutputFromFile('sidebar')
-      .setTitle('My Custom Sidebar');
+      .setTitle('Docopilot');
   DocumentApp.getUi().showSidebar(html);
 }
 
@@ -141,7 +141,7 @@ function getGeminiComments(finalPrompt, apiKey) {
  * @param {string} [quoteInFocus] Optional. The specific quote string to highlight with the focus color.
  */
 function highlightCommentsInDoc(quotesToHighlight, quoteInFocus = null) {
-  let focusedRange = null; // Variable to store the range of the focused quote
+  let focusedRange = null;
   try {
     const doc = DocumentApp.getActiveDocument();
     const body = doc.getBody();
@@ -176,17 +176,14 @@ function highlightCommentsInDoc(quotesToHighlight, quoteInFocus = null) {
           console.warn(`Skipping quote index ${index} due to empty or invalid value.`);
           return;
       }
-      // Avoid double-highlighting the focused quote here if it's in the main list
       if (quote === quoteInFocus) return;
-
-      applyHighlight(body, quote, HIGHLIGHT_COLOR);
+      applyHighlight(doc, body, quote, HIGHLIGHT_COLOR);
     });
 
     // 3. Highlight the specific focused quote with the focus color
     if (quoteInFocus) {
         console.log(`Attempting to highlight focused quote: "${quoteInFocus}"`);
-        // Use applyHighlight and capture the first found range
-        focusedRange = applyHighlight(body, quoteInFocus, FOCUSED_HIGHLIGHT_COLOR, true); // Pass true to capture range
+        focusedRange = applyHighlight(doc, body, quoteInFocus, FOCUSED_HIGHLIGHT_COLOR, true);
     }
 
     // 4. Set selection to the focused quote range (if found)
@@ -210,13 +207,14 @@ function highlightCommentsInDoc(quotesToHighlight, quoteInFocus = null) {
 /**
  * Helper function to apply background color to all occurrences of a text quote.
  * Optionally captures the Range of the first occurrence.
+ * @param {Document} doc The active document object.
  * @param {Body} body The document body element.
  * @param {string} quote The text to find.
  * @param {string} color The background color to apply.
  * @param {boolean} [captureFirstRange=false] Whether to capture and return the Range of the first match.
  * @return {Range|null} The Range of the first match if captureFirstRange is true, otherwise null.
  */
-function applyHighlight(body, quote, color, captureFirstRange = false) {
+function applyHighlight(doc, body, quote, color, captureFirstRange = false) {
     let firstRange = null;
     if (!quote || !color) return firstRange;
     let searchResult = body.findText(quote);
@@ -229,12 +227,16 @@ function applyHighlight(body, quote, color, captureFirstRange = false) {
         if (element.asText()) {
             element.asText().setBackgroundColor(start, end, color);
             count++;
-            // Capture the range of the first occurrence if requested
             if (captureFirstRange && firstRange === null) {
-                firstRange = searchResult.getRange();
-                console.log(`Captured first range for quote: "${quote}"`);
-                // Optional: If we only want to highlight the first match when capturing,
-                // we could break here. But for now, let's highlight all matches.
+                try {
+                  const rangeBuilder = doc.newRange();
+                  rangeBuilder.addElement(element, start, end);
+                  firstRange = rangeBuilder.build();
+                  console.log(`Captured first range for quote: "${quote}"`);
+                } catch (e) {
+                  console.error(`Error building range for quote "${quote}": ${e.stack}`);
+                  // Continue without the range if building fails
+                }
             }
         }
         searchResult = body.findText(quote, searchResult);
@@ -242,7 +244,7 @@ function applyHighlight(body, quote, color, captureFirstRange = false) {
     if (count === 0) {
         console.warn(`Text not found for applying highlight (${color}): "${quote}"`);
     }
-    return firstRange; // Return the captured range (or null)
+    return firstRange;
 }
 
 /**
