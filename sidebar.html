@@ -6,43 +6,66 @@
       /* Basic styling */
       body { font-family: sans-serif; margin: 10px; }
       #results { margin-top: 15px; border-top: 1px solid #ccc; padding-top: 10px; }
-      .comment-block { border: 1px solid #eee; padding: 8px; margin-bottom: 8px; }
+      .comment-block { border: 1px solid #eee; padding: 8px; margin-bottom: 8px; transition: border-color 0.3s ease; }
       .comment-quote { font-style: italic; color: #555; margin-bottom: 4px; }
       .comment-text { }
       button { margin-top: 5px; }
+      textarea { width: 95%; margin-top: 2px; height: 80px; font-family: inherit; }
+      .focused-comment { border-color: #4285F4; border-width: 2px; }
+      label { display: block; margin-top: 10px; font-weight: bold;}
     </style>
   </head>
   <body>
     <h1>Document Analysis</h1>
 
     <div>
-      <label for="apiKey">Gemini API Key:</label><br>
+      <label for="apiKey">Gemini API Key:</label>
       <input type="password" id="apiKey" style="width: 95%;">
+      <small>Need a key? <a href="https://ai.google.dev/gemini-api/docs/api-key" target="_blank">Get one here</a>.</small>
+    </div>
+
+    <div>
+        <label for="customPrompt">Analysis Prompt:</label>
+        <textarea id="customPrompt"></textarea>
     </div>
 
     <button id="analyzeButton">Analyze for Comments</button>
 
     <div id="results">
       <!-- Comments will be displayed here -->
-      <p>Click the button to analyze the document.</p>
+      <p>Enter your API key and click the button to analyze.</p>
     </div>
 
     <script>
+      const defaultPrompt = `Please review the following document text and provide constructive comments. For each comment, identify the exact phrase or sentence from the text that the comment refers to. Present your output STRICTLY as a JSON array of objects, where each object has a "quote" key (containing the exact text phrase) and a "comment" key (containing your feedback). Do not include any text outside of the JSON array.\n\nExample format:\n[\n  {\n    "quote": "This is a sentence to comment on.",\n    "comment": "This sentence could be clearer."
+  },\n  {\n    "quote": "Another phrase needing feedback.",\n    "comment": "Consider rephrasing this part."
+  }\n]\n\nDocument Text:\n---\n{docText}\n---`; // Placeholder will be replaced later
+
+      document.getElementById('customPrompt').value = defaultPrompt.replace('{docText}', '[Document text will be inserted here]');
       document.getElementById('analyzeButton').addEventListener('click', analyzeDocument);
+
+      let currentlyFocusedQuote = null;
+      let pollingInterval = null;
 
       function analyzeDocument() {
         const apiKey = document.getElementById('apiKey').value;
+        const customPromptTemplate = document.getElementById('customPrompt').value;
         const resultsDiv = document.getElementById('results');
         const analyzeButton = document.getElementById('analyzeButton');
 
         if (!apiKey) {
-          resultsDiv.innerHTML = '<p style="color: red;">Please enter your Gemini API Key.</p>';
+          resultsDiv.innerHTML = '<p style="color: red;">Please enter your Gemini API Key. <a href="https://ai.google.dev/gemini-api/docs/api-key" target="_blank">Need help?</a></p>';
+          return;
+        }
+        if (!customPromptTemplate) {
+          resultsDiv.innerHTML = '<p style="color: red;">Please enter a prompt.</p>';
           return;
         }
 
         // Disable button and show loading state
         analyzeButton.disabled = true;
         resultsDiv.innerHTML = '<p>Fetching document content...</p>';
+        stopPolling(); // Stop polling while fetching new comments
 
         google.script.run
           .withSuccessHandler(handleDocContent)
@@ -53,6 +76,7 @@
       function handleDocContent(docContent) {
         console.log("Document Content Received (first 100 chars):", docContent.substring(0, 100));
         const apiKey = document.getElementById('apiKey').value;
+        const customPromptTemplate = document.getElementById('customPrompt').value;
         const resultsDiv = document.getElementById('results');
         resultsDiv.innerHTML = '<p>Analyzing content with Gemini...</p>';
 
@@ -62,10 +86,13 @@
             return;
         }
 
+        // Replace placeholder in prompt with actual document content
+        const finalPrompt = customPromptTemplate.replace('{docText}', docContent);
+
         google.script.run
           .withSuccessHandler(displayComments)
           .withFailureHandler(handleError)
-          .getGeminiComments(docContent, apiKey);
+          .getGeminiComments(finalPrompt, apiKey); // Pass final prompt
       }
 
       function displayComments(comments) {
@@ -74,27 +101,52 @@
          analyzeButton.disabled = false; // Re-enable button
 
          console.log("Comments received:", comments);
+         currentlyFocusedQuote = null; // Reset focus
 
          if (!comments || comments.length === 0) {
            resultsDiv.innerHTML = '<p>No comments were generated.</p>';
+           stopPolling();
            return;
          }
 
          // Render comments
          let html = '<h2>Generated Comments:</h2>';
-         comments.forEach(comment => {
-           html += '<div class="comment-block">';
+         comments.forEach((comment, index) => {
+           // Add data-quote attribute for later focusing
+           html += `<div class="comment-block" data-quote="${escapeHtml(comment.quote)}" id="comment-${index}">`;
            html += `<div class="comment-quote">${escapeHtml(comment.quote)}</div>`;
            html += `<div class="comment-text">${escapeHtml(comment.comment)}</div>`;
            html += '</div>';
          });
          resultsDiv.innerHTML = html;
+
+         // After rendering, start highlighting in the doc
+         console.log("Requesting document highlighting...");
+         google.script.run
+            .withSuccessHandler(onHighlightSuccess)
+            .withFailureHandler(onHighlightError)
+            .highlightCommentsInDoc(comments);
+      }
+
+      function onHighlightSuccess() {
+        console.log("Document highlighting successful.");
+        // Start polling for cursor focus
+        startPolling();
+      }
+
+      function onHighlightError(error) {
+        console.error("Highlighting Error:", error);
+        // Maybe show a non-fatal error to the user
+        // document.getElementById('results').innerHTML += '<p style="color: orange;">Could not highlight comments in document.</p>';
+        // Still start polling even if highlighting fails?
+        startPolling();
       }
 
       function handleError(error) {
         const resultsDiv = document.getElementById('results');
         const analyzeButton = document.getElementById('analyzeButton');
         analyzeButton.disabled = false; // Re-enable button
+        stopPolling(); // Stop polling on error
 
         // Log the full error for debugging
         console.error("Script Error:", JSON.stringify(error, null, 2));
@@ -102,11 +154,73 @@
         // Display a user-friendly message
         resultsDiv.innerHTML = `<p style="color: red;">Error: ${escapeHtml(error.message || String(error))}</p>`;
 
-        // Special handling for API key errors if possible (may vary)
-        if (typeof error.message === 'string' && error.message.includes('API key not valid')) {
-            resultsDiv.innerHTML += '<p style="color: red;">Please check your Gemini API Key.</p>';
+        // Special handling for API key errors
+        if (typeof error.message === 'string' && (error.message.includes('API key not valid') || error.message.includes('API_KEY_INVALID'))) {
+            resultsDiv.innerHTML += `<p style="color: red;">Please check your Gemini API Key. <a href="https://ai.google.dev/gemini-api/docs/api-key" target="_blank">Need help?</a></p>`;
         }
       }
+
+      // --- Cursor Focus Polling --- 
+
+      function startPolling() {
+        if (pollingInterval) return; // Already polling
+        console.log("Starting focus polling.");
+        pollingInterval = setInterval(() => {
+          google.script.run
+            .withSuccessHandler(updateFocus)
+            .withFailureHandler(logPollingError) // Use a less intrusive error handler for polling
+            .getFocusedQuote();
+        }, 1500); // Poll every 1.5 seconds
+      }
+
+      function stopPolling() {
+        if (pollingInterval) {
+          console.log("Stopping focus polling.");
+          clearInterval(pollingInterval);
+          pollingInterval = null;
+        }
+      }
+
+      function updateFocus(focusedQuote) {
+        // Trim quote just in case
+        focusedQuote = focusedQuote ? focusedQuote.trim() : null;
+        
+        if (focusedQuote === currentlyFocusedQuote) {
+          return; // No change
+        }
+
+        console.log("Focus changed to quote:", focusedQuote);
+
+        // Remove focus from the previous element
+        if (currentlyFocusedQuote) {
+          const oldElement = document.querySelector(`.comment-block[data-quote="${escapeCssSelector(currentlyFocusedQuote)}"]`);
+          if (oldElement) {
+            oldElement.classList.remove('focused-comment');
+          }
+        }
+
+        // Add focus to the new element
+        if (focusedQuote) {
+          const newElement = document.querySelector(`.comment-block[data-quote="${escapeCssSelector(focusedQuote)}"]`);
+          if (newElement) {
+            newElement.classList.add('focused-comment');
+            // Optional: Scroll into view
+            // newElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          } else {
+             console.warn("Could not find comment block for quote:", focusedQuote);
+          }
+        }
+
+        currentlyFocusedQuote = focusedQuote;
+      }
+
+      function logPollingError(error) {
+          // Avoid spamming console for common polling issues, maybe log only once
+          console.warn("Polling Error (likely transient):", error);
+          // Consider stopping polling if errors persist
+      }
+
+      // --- Utility Functions --- 
 
       // Utility function to prevent basic XSS
       function escapeHtml(unsafe) {
@@ -120,6 +234,12 @@
                .replace(/>/g, "&gt;")
                .replace(/"/g, "&quot;")
                .replace(/'/g, "&#039;");
+      }
+
+      // Utility function to escape quotes for CSS selectors
+      function escapeCssSelector(str) {
+        if (!str) return '';
+        return str.replace(/(["'\\!#$%&()*+,./:;<=>?@[\]^`{|}~])/g, '\\$1');
       }
 
     </script>
