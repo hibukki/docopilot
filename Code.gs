@@ -53,7 +53,7 @@ function getGeminiComments(finalPrompt, apiKey) {
     throw new Error("API Key is required to contact Gemini.");
   }
 
-  const API_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + apiKey;
+  const API_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=" + apiKey;
 
   const requestBody = {
     contents: [{
@@ -70,7 +70,7 @@ function getGeminiComments(finalPrompt, apiKey) {
     method: 'post',
     contentType: 'application/json',
     payload: JSON.stringify(requestBody),
-    muteHttpExceptions: true // Important to handle errors manually
+    muteHttpExceptions: true
   };
 
   let response;
@@ -87,19 +87,33 @@ function getGeminiComments(finalPrompt, apiKey) {
   if (responseCode === 200) {
     try {
       const jsonResponse = JSON.parse(responseBody);
-      // Navigate the typical Gemini JSON structure
       const candidates = jsonResponse.candidates;
       if (candidates && candidates.length > 0 && candidates[0].content && candidates[0].content.parts && candidates[0].content.parts.length > 0) {
-        const commentJsonString = candidates[0].content.parts[0].text;
-        // The model should return a JSON string, parse it again
-        const comments = JSON.parse(commentJsonString);
-        // Basic validation
-        if (Array.isArray(comments) && comments.every(c => typeof c === 'object' && 'quote' in c && 'comment' in c)) {
-            console.log("Received comments from Gemini:", JSON.stringify(comments, null, 2));
-            return comments;
+        const geminiJsonString = candidates[0].content.parts[0].text;
+        // Parse the JSON string returned by Gemini
+        const resultObject = JSON.parse(geminiJsonString);
+
+        // Validate the new structure
+        if (typeof resultObject !== 'object' || resultObject === null || !Array.isArray(resultObject.comments)) {
+             console.error("Gemini response was not in the expected format {thinking: string, comments: array}:", geminiJsonString);
+             throw new Error("Gemini returned data in an unexpected format. Expected {thinking: ..., comments: [...]}.");
+        }
+
+        // Extract the comments array
+        const comments = resultObject.comments;
+        console.log("Extracted comments from Gemini response:", JSON.stringify(comments, null, 2));
+        
+        // Optional: Log the thinking part
+        if (resultObject.thinking) {
+             console.log("Gemini Thinking:", resultObject.thinking);
+        }
+
+        // Validate the comments array structure (as before)
+        if (comments.every(c => typeof c === 'object' && 'quote' in c && 'comment' in c)) {
+            return comments; // Return only the comments array
         } else {
-            console.error("Gemini response was not in the expected format (array of {quote, comment}):", commentJsonString);
-            throw new Error("Gemini returned data in an unexpected format.");
+            console.error("Gemini 'comments' array contents were not in the expected format [{quote, comment}, ...]:", JSON.stringify(comments, null, 2));
+            throw new Error("Gemini returned comments array with unexpected item structure.");
         }
       } else {
         // Handle cases where the response structure is unexpected or indicates no content/error (e.g., safety filters)
