@@ -37,6 +37,7 @@
     </div>
 
     <script>
+      const HIGHLIGHT_COLOR = '#FFF8C4'; // Define on client-side too
       const DOC_TEXT_PLACEHOLDER = '{docText}';
       const defaultPrompt = `Please review the following document text and provide constructive comments. For each comment, identify the exact phrase or sentence from the text that the comment refers to. Present your output STRICTLY as a JSON array of objects, where each object has a "quote" key (containing the exact text phrase) and a "comment" key (containing your feedback). Do not include any text outside of the JSON array.\n\nExample format:\n[\n  {\n    "quote": "This is a sentence to comment on.",\n    "comment": "This sentence could be clearer."
   },\n  {\n    "quote": "Another phrase needing feedback.",\n    "comment": "Consider rephrasing this part."
