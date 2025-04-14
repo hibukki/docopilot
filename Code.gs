@@ -141,6 +141,7 @@ function getGeminiComments(finalPrompt, apiKey) {
  * @param {string} [quoteInFocus] Optional. The specific quote string to highlight with the focus color.
  */
 function highlightCommentsInDoc(quotesToHighlight, quoteInFocus = null) {
+  let focusedRange = null; // Variable to store the range of the focused quote
   try {
     const doc = DocumentApp.getActiveDocument();
     const body = doc.getBody();
@@ -184,10 +185,22 @@ function highlightCommentsInDoc(quotesToHighlight, quoteInFocus = null) {
     // 3. Highlight the specific focused quote with the focus color
     if (quoteInFocus) {
         console.log(`Attempting to highlight focused quote: "${quoteInFocus}"`);
-        applyHighlight(body, quoteInFocus, FOCUSED_HIGHLIGHT_COLOR);
+        // Use applyHighlight and capture the first found range
+        focusedRange = applyHighlight(body, quoteInFocus, FOCUSED_HIGHLIGHT_COLOR, true); // Pass true to capture range
     }
 
-    console.log("Highlighting process completed.");
+    // 4. Set selection to the focused quote range (if found)
+    if (focusedRange) {
+        console.log("Setting document selection to the focused quote range.");
+        try {
+            doc.setSelection(focusedRange);
+        } catch (e) {
+             console.error("Error setting selection: " + e.stack);
+             // Log the error but don't fail the whole operation
+        }
+    }
+
+    console.log("Highlighting and selection process completed.");
   } catch (e) {
     console.error("Error highlighting quotes in document: " + e.stack);
     throw new Error("Failed to highlight quotes in document: " + e.message);
@@ -196,12 +209,16 @@ function highlightCommentsInDoc(quotesToHighlight, quoteInFocus = null) {
 
 /**
  * Helper function to apply background color to all occurrences of a text quote.
+ * Optionally captures the Range of the first occurrence.
  * @param {Body} body The document body element.
  * @param {string} quote The text to find.
  * @param {string} color The background color to apply.
+ * @param {boolean} [captureFirstRange=false] Whether to capture and return the Range of the first match.
+ * @return {Range|null} The Range of the first match if captureFirstRange is true, otherwise null.
  */
-function applyHighlight(body, quote, color) {
-    if (!quote || !color) return;
+function applyHighlight(body, quote, color, captureFirstRange = false) {
+    let firstRange = null;
+    if (!quote || !color) return firstRange;
     let searchResult = body.findText(quote);
     let count = 0;
     while (searchResult !== null) {
@@ -212,12 +229,20 @@ function applyHighlight(body, quote, color) {
         if (element.asText()) {
             element.asText().setBackgroundColor(start, end, color);
             count++;
+            // Capture the range of the first occurrence if requested
+            if (captureFirstRange && firstRange === null) {
+                firstRange = searchResult.getRange();
+                console.log(`Captured first range for quote: "${quote}"`);
+                // Optional: If we only want to highlight the first match when capturing,
+                // we could break here. But for now, let's highlight all matches.
+            }
         }
         searchResult = body.findText(quote, searchResult);
     }
     if (count === 0) {
         console.warn(`Text not found for applying highlight (${color}): "${quote}"`);
     }
+    return firstRange; // Return the captured range (or null)
 }
 
 /**
