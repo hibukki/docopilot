@@ -215,6 +215,7 @@
       let currentComments = []; // Store the current comments with quotes
       let currentlyFocusedCommentId = null;
       let pollingInterval = null;
+      let lastProcessedCursorState = null; // Variable to store the last state
 
       // Start polling immediately after sidebar setup
       startPolling();
@@ -372,6 +373,19 @@
       function updateFocus(cursorState) {
         console.log("Polling Interval: Received state:", cursorState);
 
+        // Optimization: Check if cursor context actually changed
+        if (lastProcessedCursorState && cursorState && 
+            lastProcessedCursorState.elementText === cursorState.elementText && 
+            lastProcessedCursorState.offset === cursorState.offset) {
+            console.log("Polling: Cursor state unchanged since last check. Skipping update.");
+            // Update lastProcessedCursorState even if unchanged, in case the object reference differs
+            lastProcessedCursorState = cursorState; 
+            return;
+        }
+        
+        // Store the new state we are about to process
+        lastProcessedCursorState = cursorState; 
+
         let foundCommentId = null;
 
         if (cursorState && cursorState.elementText && currentComments.length > 0) {
@@ -407,7 +421,10 @@
 
         // Update focus based on whether a comment was found
         if (currentlyFocusedCommentId !== foundCommentId) {
+             console.log(`Polling: Focus target changed to ${foundCommentId}. Calling setCommentFocus.`);
              setCommentFocus(foundCommentId); // Call the central focus function
+        } else {
+             console.log(`Polling: Focus target (${foundCommentId}) remains the same. No UI update needed.`);
         }
       }
 
