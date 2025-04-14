@@ -131,7 +131,9 @@ function getGeminiComments(finalPrompt, apiKey) {
       }
     } catch (e) {
       console.error("Error parsing Gemini response: " + e.stack + "\nResponse Body:\n" + responseBody);
-      throw new Error("Could not parse the response from Gemini. " + e.message);
+      // Include original error message and a snippet of the body in the thrown error
+      const snippet = responseBody ? responseBody.substring(0, 150) + '...' : 'N/A';
+      throw new Error(`Could not parse Gemini response. Parse Error: ${e.message || e.toString()}. Body Snippet: ${snippet}`);
     }
   } else {
     console.error(`Gemini API Error: ${responseCode}\nResponse Body: ${responseBody}`);
