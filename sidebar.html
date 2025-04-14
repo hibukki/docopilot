@@ -187,6 +187,7 @@
             <label for="customPrompt">
                 Analysis Prompt:
                 <button id="resetPromptButton" title="Reset to default prompt" style="float: right; background: none; border: none; color: var(--primary-color); cursor: pointer; padding: 0; font-size: 12px; margin-top: -2px;">(Reset)</button>
+                <button id="savePromptButton" title="Save current prompt" style="float: right; background: none; border: none; color: var(--primary-color); cursor: pointer; padding: 0; font-size: 12px; margin-top: -2px; margin-right: 5px; display: none;">(Save)</button>
             </label>
             <textarea id="customPrompt"></textarea>
         </div>
@@ -208,6 +209,8 @@
       // Initialization
       document.getElementById('analyzeButton').addEventListener('click', analyzeDocument);
       document.getElementById('resetPromptButton').addEventListener('click', resetPromptToDefault);
+      document.getElementById('savePromptButton').addEventListener('click', saveCurrentPrompt);
+      document.getElementById('customPrompt').addEventListener('input', handlePromptInputChange);
 
       // Load initial state from server
       google.script.run
@@ -223,6 +226,11 @@
       let currentlyFocusedCommentId = null;
       let pollingInterval = null;
       let lastProcessedCursorState = null;
+      let loadedPromptValue = ''; 
+      let lastDocContent = null;        // Store last known document content
+      let lastChangeTimestamp = 0;    // Timestamp of last detected content change
+      let analysisDebounceTimer = null; // Timer for debouncing auto-analysis
+      const AUTO_ANALYSIS_DELAY = 1500; // Wait 1.5 seconds after last change
 
       startPolling();
 
@@ -238,7 +246,10 @@
 
       function populatePrompt(promptText) {
         console.log("Populating prompt text area.");
-        document.getElementById('customPrompt').value = promptText;
+        const textarea = document.getElementById('customPrompt');
+        textarea.value = promptText;
+        loadedPromptValue = promptText; // Store the loaded value
+        handlePromptInputChange(); // Check initial state for save button visibility
       }
 
       function logInitialApiKeyError(error) {
@@ -251,7 +262,7 @@
           // Maybe display a fallback or default directly in the textarea
       }
 
-      // --- Button Actions --- 
+      // --- Button Actions / Event Handlers --- 
       function analyzeDocument() {
         const apiKey = document.getElementById('apiKey').value;
         const customPromptTemplate = document.getElementById('customPrompt').value;
@@ -272,15 +283,14 @@
         resultsDiv.innerHTML = '<p>Fetching document content...</p>';
 
         // Save the key and prompt when analysis is attempted
+        // NOTE: Prompt is only saved if user explicitly clicked "Save" or if it matches default
+        // Let's change this: Save prompt on Analyze IF it's different from loaded (or handled by save button)
+        // For simplicity now, we rely on the explicit Save button or Reset button.
         if (apiKey) {
            console.log("Attempting to save API Key...");
            google.script.run.saveApiKey(apiKey);
         }
-        if (customPromptTemplate) {
-            console.log("Attempting to save User Prompt...");
-            google.script.run.saveUserPrompt(customPromptTemplate);
-        }
-
+       
         google.script.run
           .withSuccessHandler(handleDocContent)
           .withFailureHandler(handleError)
@@ -290,11 +300,36 @@
       function resetPromptToDefault() {
           console.log("Resetting prompt to default...");
           google.script.run
-              .withSuccessHandler(populatePrompt) // Reuse populate function
+              .withSuccessHandler(promptText => { 
+                  populatePrompt(promptText); // Update textarea and loaded value
+                  // Explicitly clear saved user prompt property when resetting
+                  google.script.run.saveUserPrompt(null);
+              })
               .withFailureHandler(logPromptError)
               .getDefaultPrompt();
-          // Also clear the saved user prompt property
-          google.script.run.saveUserPrompt(null); 
+      }
+
+      function saveCurrentPrompt() {
+          const currentPrompt = document.getElementById('customPrompt').value;
+          console.log("Saving current prompt...");
+          google.script.run
+              .withSuccessHandler(() => {
+                  console.log("Save successful handler: Updating loaded value and hiding button.");
+                  loadedPromptValue = currentPrompt; // Update the baseline
+                  handlePromptInputChange(); // Hide button again
+              })
+              .withFailureHandler(logPromptError) // Can reuse prompt error logger
+              .saveUserPrompt(currentPrompt);
+      }
+
+      function handlePromptInputChange() {
+          const currentPrompt = document.getElementById('customPrompt').value;
+          const saveButton = document.getElementById('savePromptButton');
+          if (currentPrompt !== loadedPromptValue) {
+              saveButton.style.display = 'inline'; // Show save button
+          } else {
+              saveButton.style.display = 'none'; // Hide save button
+          }
       }
 
       function handleDocContent(docContent) {
@@ -395,7 +430,7 @@
         }
       }
 
-      // --- Cursor Focus Polling --- 
+      // --- Cursor Focus Polling & Auto-Analysis --- 
 
       function startPolling() {
         if (pollingInterval) {
@@ -404,31 +439,39 @@
         }
         console.log("startPolling: Setting up polling interval...");
         pollingInterval = setInterval(() => {
-          console.log("Polling Interval: Calling getCursorState...");
-          google.script.run
-            .withSuccessHandler(gotCursorState)
-            .withFailureHandler(logPollingError)
-            .getCursorState();
-        }, 1500);
+          console.log("Polling Interval: Calling getCursorState and getDocumentContent...");
+          // Fetch both pieces of state concurrently
+          Promise.all([
+            new Promise((resolve, reject) => google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getCursorState()),
+            new Promise((resolve, reject) => google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getDocumentContent())
+          ]).then(([cursorState, docContent]) => {
+            handlePollingResults(cursorState, docContent);
+          }).catch(error => {
+            logPollingError(error); // Log error if either call fails
+          });
+        }, 1500); // Keep polling interval (adjust if needed)
       }
 
-      function gotCursorState(cursorState) {
-        console.log("gotCursorState:", cursorState);
+      function handlePollingResults(cursorState, docContent) {
+          // 1. Handle Cursor Focus Update (as before)
+          handleCursorFocus(cursorState);
 
-        // Null?
-        if (!cursorState) {
-          console.log("gotCursorState: Cursor state is null. Skipping update.");
-          return;
-        }
+          // 2. Handle Auto-Analysis based on Document Content Change
+          handleAutoAnalysis(docContent);
+      }
 
-        // Unchanged?
+      // Renamed from updateFocus to be more specific
+      function handleCursorFocus(cursorState) { 
+        console.log("handleCursorFocus: Processing state:", cursorState);
+
+        // Optimization: Check if cursor context actually changed
         if (lastProcessedCursorState && cursorState && 
             lastProcessedCursorState.elementText === cursorState.elementText && 
             lastProcessedCursorState.offset === cursorState.offset) {
-            console.log("Polling: Cursor state unchanged since last check. Skipping update.");
+            console.log("handleCursorFocus: Cursor state unchanged. Skipping update.");
+            lastProcessedCursorState = cursorState; 
             return;
         }
-        
         lastProcessedCursorState = cursorState; 
 
         let foundCommentId = null;
@@ -447,7 +490,7 @@
                     const endIndex = startIndex + quote.length;
                     
                     if (cursorOffset >= startIndex && cursorOffset <= endIndex) {
-                        console.log(`Polling: Cursor offset ${cursorOffset} is within quote bounds [${startIndex}, ${endIndex}]. Match found for comment-${i}!`);
+                        console.log(`handleCursorFocus: Cursor offset ${cursorOffset} is within quote bounds [${startIndex}, ${endIndex}]. Match found for comment-${i}!`);
                         foundCommentId = `comment-${i}`;
                         break;
                     }
@@ -458,13 +501,89 @@
                 }
             }
             if (!foundCommentId) {
-                 console.log("Polling: Cursor position doesn't match any known quote bounds within the current text element.");
+                 console.log("handleCursorFocus: Cursor position doesn't match any known quote bounds within the current text element.");
             }
         } else {
-            console.log("Polling: No cursor state, element text, or comments available for matching.");
+            console.log("handleCursorFocus: No cursor state, element text, or comments available for matching.");
         }
 
-        setCommentFocus(foundCommentId); // Call the central focus function
+        // Update focus UI
+        if (currentlyFocusedCommentId !== foundCommentId) {
+             console.log(`handleCursorFocus: Focus target changed to ${foundCommentId}. Calling setCommentFocus.`);
+             setCommentFocus(foundCommentId);
+        } else {
+             console.log(`handleCursorFocus: Focus target (${foundCommentId}) remains the same.`);
+        }
+      }
+
+      function handleAutoAnalysis(docContent) {
+        console.log("handleAutoAnalysis: Checking content...");
+        if (docContent === null || docContent === undefined) {
+            console.log("handleAutoAnalysis: Received null/undefined content. Skipping.");
+            return;
+        }
+        if (lastDocContent === null) {
+            // First time fetching content, just store it
+            console.log("handleAutoAnalysis: Storing initial document content.");
+            lastDocContent = docContent;
+            lastChangeTimestamp = Date.now(); // Set initial timestamp
+            return;
+        }
+
+        if (docContent !== lastDocContent) {
+            console.log("handleAutoAnalysis: Document content changed.");
+            lastDocContent = docContent;
+            lastChangeTimestamp = Date.now();
+            // Clear existing debounce timer if content changes again
+            if (analysisDebounceTimer) {
+                console.log("handleAutoAnalysis: Clearing existing analysis timer.");
+                clearTimeout(analysisDebounceTimer);
+                analysisDebounceTimer = null;
+            }
+             // Set a new timer to trigger analysis after delay
+            console.log(`handleAutoAnalysis: Setting analysis timer for ${AUTO_ANALYSIS_DELAY}ms.`);
+            analysisDebounceTimer = setTimeout(() => {
+                console.log("handleAutoAnalysis: Debounce delay elapsed. Triggering analysis.");
+                analysisDebounceTimer = null; // Clear the timer variable
+                // Check API key etc. before triggering
+                const apiKey = document.getElementById('apiKey').value;
+                const customPromptTemplate = document.getElementById('customPrompt').value;
+                if (apiKey && customPromptTemplate) {
+                    triggerAnalysis(); // Call a separate trigger function
+                } else {
+                    console.log("handleAutoAnalysis: Skipping auto-analysis due to missing API key or prompt.");
+                }
+            }, AUTO_ANALYSIS_DELAY);
+
+        } else {
+            console.log("handleAutoAnalysis: Document content unchanged.");
+            // Optional: Could add logic here to check if the delay has passed *without* a timer already set,
+            // but the current logic with resetting the timer on change is simpler.
+        }
+      }
+
+      // Function to trigger the actual analysis (similar to button click but without UI feedback like disabling button)
+      function triggerAnalysis() {
+          console.log("triggerAnalysis: Starting auto-analysis...");
+          // Essentially reuse the core logic from analyzeDocument but without UI disables/messages
+          const apiKey = document.getElementById('apiKey').value;
+          const customPromptTemplate = document.getElementById('customPrompt').value;
+          const resultsDiv = document.getElementById('results');
+          // Maybe add a subtle loading indicator?
+          // resultsDiv.innerHTML = '<p>Auto-analyzing...</p>'; 
+
+          // Save prompt if needed (or rely on explicit save button)
+          if (customPromptTemplate && customPromptTemplate !== loadedPromptValue) {
+             console.log("triggerAnalysis: Saving changed prompt before auto-analysis...");
+             google.script.run.saveUserPrompt(customPromptTemplate);
+             loadedPromptValue = customPromptTemplate; // Update baseline
+             handlePromptInputChange(); // Ensure save button hides
+          }
+
+          google.script.run
+            .withSuccessHandler(handleDocContent) // Reuse existing handlers
+            .withFailureHandler(handleError)
+            .getDocumentContent(); // Need content again to pass to Gemini
       }
 
       /**
