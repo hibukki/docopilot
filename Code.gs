@@ -133,30 +133,29 @@ function getGeminiComments(finalPrompt, apiKey) {
 }
 
 /**
- * Highlights the text segments (quotes) from the comments in the document.
+ * Highlights the specified text segments (quotes) in the document.
  *
- * @param {Array<Object>} comments An array of comment objects { quote: string, comment: string }.
+ * @param {Array<string>} quotesToHighlight An array of quote strings to find and highlight.
  */
-function highlightCommentsInDoc(comments) {
+function highlightCommentsInDoc(quotesToHighlight) {
   try {
     const doc = DocumentApp.getActiveDocument();
     const body = doc.getBody();
 
-    // Clear existing highlights first (optional, but good for clean state)
-    body.editAsText().setBackgroundColor(null); // Set background to transparent/default
+    // Clear existing highlights first
+    body.editAsText().setBackgroundColor(null);
 
-    if (!comments || comments.length === 0) {
-      console.log("No comments provided for highlighting.");
-      return; 
+    if (!quotesToHighlight || quotesToHighlight.length === 0) {
+      console.log("No quotes provided for highlighting.");
+      return;
     }
 
-    console.log(`Attempting to highlight ${comments.length} comment quotes.`);
-    const bodyText = body.getText(); // Get text once for efficiency
+    console.log(`Attempting to highlight ${quotesToHighlight.length} quotes.`);
+    const bodyText = body.getText();
 
-    comments.forEach((comment, index) => {
-      const quote = comment.quote;
+    quotesToHighlight.forEach((quote, index) => {
       if (!quote || typeof quote !== 'string' || quote.trim() === '') {
-          console.warn(`Skipping comment index ${index} due to empty or invalid quote.`);
+          console.warn(`Skipping quote index ${index} due to empty or invalid value.`);
           return;
       }
 
@@ -167,12 +166,10 @@ function highlightCommentsInDoc(comments) {
         const start = searchResult.getStartOffset();
         const end = searchResult.getEndOffsetInclusive();
 
-        // Check if the found element is part of the body's text content
         if (element.asText()) {
           element.asText().setBackgroundColor(start, end, HIGHLIGHT_COLOR);
           count++;
         }
-        // Find the next occurrence
         searchResult = body.findText(quote, searchResult);
       }
       if (count === 0) {
@@ -180,112 +177,83 @@ function highlightCommentsInDoc(comments) {
       }
     });
     console.log("Highlighting process completed.");
-    DocumentApp.flush(); // Ensure changes are applied
+    DocumentApp.flush();
   } catch (e) {
-    console.error("Error highlighting comments in document: " + e.stack);
-    // Rethrow the error so the client-side can handle it (e.g., in onHighlightError)
-    throw new Error("Failed to highlight comments in document: " + e.message);
+    console.error("Error highlighting quotes in document: " + e.stack);
+    throw new Error("Failed to highlight quotes in document: " + e.message);
   }
 }
 
 /**
- * Finds the text ("quote") associated with the highlighted section
- * where the user's cursor is currently located.
+ * Gets the current state of the user's cursor, primarily its location
+ * and the background color of the text it's in or near.
  *
- * @return {string|null} The quote text if the cursor is in a highlighted area,
- *                      otherwise null.
+ * @return {object|null} An object like {bgColor: string|null, offset: number, elementTextLength: number|null } or null if no cursor.
  */
-function getFocusedQuote() {
+function getCursorState() {
+  console.log("getCursorState: Running...");
   try {
     const doc = DocumentApp.getActiveDocument();
     const cursor = doc.getCursor();
 
     if (!cursor) {
-      // No cursor, maybe focus is outside the doc editor
+      console.log("getCursorState: No cursor found.");
       return null;
     }
 
-    const element = cursor.getElement();
     const offset = cursor.getOffset();
+    const element = cursor.getElement();
+    console.log(`getCursorState: Cursor offset=${offset}, Element type=${element ? element.getType() : 'null'}`);
 
-    // Check if the element containing the cursor is text
-    if (!element || element.getType() !== DocumentApp.ElementType.TEXT) {
-        // Cursor might be at the start/end of a paragraph, or on an image etc.
-        // Try checking the element *before* the cursor if offset is 0
-        if (offset === 0 && cursor.getSurroundingText().getText().length > 0) {
-            // Likely at the beginning of a text element, check the background there
-            const surroundingText = cursor.getSurroundingText();
-            if (surroundingText.getBackgroundColor(0) === HIGHLIGHT_COLOR) {
-                return findQuoteFromPosition(surroundingText, 0);
+    let bgColor = null;
+    let elementTextLength = null;
+
+    if (element && element.getType() === DocumentApp.ElementType.TEXT) {
+        const textElement = element.asText();
+        const textContent = textElement.getText();
+        elementTextLength = textContent.length;
+        console.log(`getCursorState: Cursor in TEXT element. Length=${elementTextLength}`);
+
+        // Check background color *before* the cursor first (most common case when *inside* highlight)
+        if (offset > 0) {
+            bgColor = textElement.getBackgroundColor(offset - 1);
+            console.log(`getCursorState: Background at offset ${offset - 1} (before cursor): ${bgColor}`);
+        }
+
+        // If not highlighted before, check *at* the cursor (for start of highlight)
+        if (bgColor !== HIGHLIGHT_COLOR && offset < textContent.length) {
+            const bgColorAt = textElement.getBackgroundColor(offset);
+            console.log(`getCursorState: Background at offset ${offset} (at cursor): ${bgColorAt}`);
+            if (bgColorAt === HIGHLIGHT_COLOR) {
+                bgColor = HIGHLIGHT_COLOR;
             }
         }
-        // Otherwise, not in a text element or not at a checkable position
-        return null;
+    } else if (element) {
+         console.log(`getCursorState: Cursor in non-TEXT element type: ${element.getType()}`);
+         // Attempt to check surrounding text if at the boundary of a paragraph
+         if (offset === 0) {
+             const surroundingText = cursor.getSurroundingText();
+             if (surroundingText && surroundingText.getText().length > 0) {
+                const surroundingBg = surroundingText.getBackgroundColor(0);
+                console.log(`getCursorState: Cursor at offset 0, surrounding text(0) background: ${surroundingBg}`);
+                if (surroundingBg === HIGHLIGHT_COLOR) {
+                    bgColor = HIGHLIGHT_COLOR;
+                    // We don't have the exact element text length here easily
+                }
+            }
+         }
     }
 
-    const textElement = element.asText();
-    
-    // Check the background color *at* the cursor position.
-    // Note: If the cursor is at the boundary between highlighted/non-highlighted,
-    // this checks the character *preceding* the cursor offset.
-    let checkOffset = offset > 0 ? offset - 1 : 0; 
-    const bgColor = textElement.getBackgroundColor(checkOffset);
-
-    if (bgColor !== HIGHLIGHT_COLOR) {
-      // If the char before isn't highlighted, check the char *at* the cursor 
-      // (if the cursor is not at the very end of the text element)
-      if (offset < textElement.getText().length && textElement.getBackgroundColor(offset) === HIGHLIGHT_COLOR) {
-           // Cursor is likely at the *start* of a highlighted section
-           return findQuoteFromPosition(textElement, offset);
-      } 
-      // Not in a highlighted section
-      return null;
-    }
-    
-    // Cursor is within or at the end of a highlighted section
-    return findQuoteFromPosition(textElement, checkOffset);
+    console.log(`getCursorState: Returning state: bgColor=${bgColor}, offset=${offset}, elementTextLength=${elementTextLength}`);
+    return {
+        bgColor: bgColor,      // The determined background color (HIGHLIGHT_COLOR or null/other)
+        offset: offset,        // Cursor offset within its element
+        // We could add more context later if needed, e.g., paragraph text, element ID, etc.
+        elementTextLength: elementTextLength // Length of the text element (if applicable)
+    };
 
   } catch (e) {
-    console.error("Error getting focused quote: " + e.stack);
-    // Don't disrupt the user, just return null if there's an error
-    return null;
+    console.error("Error getting cursor state: " + e.stack);
+    return null; // Return null on error to avoid disrupting polling
   }
-}
-
-/**
- * Helper function to find the full highlighted quote based on a position
- * known to be within a highlighted text element.
- *
- * @param {Text} textElement The Google Apps Script Text element.
- * @param {number} knownHighlightOffset An offset within the textElement known to be highlighted.
- * @return {string|null} The full text of the highlighted segment, or null if error.
- */
-function findQuoteFromPosition(textElement, knownHighlightOffset) {
-    try {
-        const text = textElement.getText();
-        let start = knownHighlightOffset;
-        let end = knownHighlightOffset;
-
-        // Find the start of the highlight by searching backwards
-        while (start > 0 && textElement.getBackgroundColor(start - 1) === HIGHLIGHT_COLOR) {
-            start--;
-        }
-        // Ensure the start itself is highlighted (handles edge case where cursor is after last char)
-        if(textElement.getBackgroundColor(start) !== HIGHLIGHT_COLOR) {
-             console.warn("Could not confirm start highlight at offset", start);
-             return null; // Should not happen if called correctly
-        }
-
-        // Find the end of the highlight by searching forwards
-        while (end < text.length - 1 && textElement.getBackgroundColor(end + 1) === HIGHLIGHT_COLOR) {
-            end++;
-        }
-
-        const quote = text.substring(start, end + 1);
-        console.log(`Identified focused quote: "${quote}" from range ${start}-${end}`);
-        return quote.trim(); // Trim whitespace just in case
-    } catch(e) {
-        console.error("Error in findQuoteFromPosition: " + e.stack);
-        return null;
-    }
 } 

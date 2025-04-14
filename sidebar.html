@@ -37,14 +37,16 @@
     </div>
 
     <script>
+      const DOC_TEXT_PLACEHOLDER = '{docText}';
       const defaultPrompt = `Please review the following document text and provide constructive comments. For each comment, identify the exact phrase or sentence from the text that the comment refers to. Present your output STRICTLY as a JSON array of objects, where each object has a "quote" key (containing the exact text phrase) and a "comment" key (containing your feedback). Do not include any text outside of the JSON array.\n\nExample format:\n[\n  {\n    "quote": "This is a sentence to comment on.",\n    "comment": "This sentence could be clearer."
   },\n  {\n    "quote": "Another phrase needing feedback.",\n    "comment": "Consider rephrasing this part."
-  }\n]\n\nDocument Text:\n---\n{docText}\n---`; // Placeholder will be replaced later
+  }\n]\n\nDocument Text:\n---\n${DOC_TEXT_PLACEHOLDER}\n---`;
 
-      document.getElementById('customPrompt').value = defaultPrompt.replace('{docText}', '[Document text will be inserted here]');
+      document.getElementById('customPrompt').value = defaultPrompt;
       document.getElementById('analyzeButton').addEventListener('click', analyzeDocument);
 
-      let currentlyFocusedQuote = null;
+      let currentComments = []; // Store the current comments with quotes
+      let currentlyFocusedCommentId = null;
       let pollingInterval = null;
 
       function analyzeDocument() {
@@ -87,7 +89,7 @@
         }
 
         // Replace placeholder in prompt with actual document content
-        const finalPrompt = customPromptTemplate.replace('{docText}', docContent);
+        const finalPrompt = customPromptTemplate.replace(DOC_TEXT_PLACEHOLDER, docContent);
 
         google.script.run
           .withSuccessHandler(displayComments)
@@ -98,10 +100,12 @@
       function displayComments(comments) {
          const resultsDiv = document.getElementById('results');
          const analyzeButton = document.getElementById('analyzeButton');
-         analyzeButton.disabled = false; // Re-enable button
+         analyzeButton.disabled = false;
 
          console.log("Comments received:", comments);
-         currentlyFocusedQuote = null; // Reset focus
+         currentComments = comments; // Store comments for later use
+         currentlyFocusedCommentId = null; // Reset focus
+         clearFocus(); // Clear visual focus
 
          if (!comments || comments.length === 0) {
            resultsDiv.innerHTML = '<p>No comments were generated.</p>';
@@ -112,20 +116,22 @@
          // Render comments
          let html = '<h2>Generated Comments:</h2>';
          comments.forEach((comment, index) => {
-           // Add data-quote attribute for later focusing
-           html += `<div class="comment-block" data-quote="${escapeHtml(comment.quote)}" id="comment-${index}">`;
+           const commentId = `comment-${index}`;
+           // Use commentId for the div id
+           html += `<div class="comment-block" data-quote="${escapeHtml(comment.quote)}" id="${commentId}">`;
            html += `<div class="comment-quote">${escapeHtml(comment.quote)}</div>`;
            html += `<div class="comment-text">${escapeHtml(comment.comment)}</div>`;
            html += '</div>';
          });
          resultsDiv.innerHTML = html;
 
-         // After rendering, start highlighting in the doc
-         console.log("Requesting document highlighting...");
+         // After rendering, extract quotes and request highlighting
+         const quotesToHighlight = comments.map(c => c.quote);
+         console.log("Requesting document highlighting for quotes:", quotesToHighlight);
          google.script.run
             .withSuccessHandler(onHighlightSuccess)
             .withFailureHandler(onHighlightError)
-            .highlightCommentsInDoc(comments);
+            .highlightCommentsInDoc(quotesToHighlight); // Pass only quotes
       }
 
       function onHighlightSuccess() {
@@ -163,14 +169,15 @@
       // --- Cursor Focus Polling --- 
 
       function startPolling() {
-        if (pollingInterval) return; // Already polling
-        console.log("Starting focus polling.");
+        if (pollingInterval) return;
+        console.log("Starting focus polling interval.");
         pollingInterval = setInterval(() => {
+          console.log("Polling: Calling getCursorState..."); // Updated function name
           google.script.run
             .withSuccessHandler(updateFocus)
-            .withFailureHandler(logPollingError) // Use a less intrusive error handler for polling
-            .getFocusedQuote();
-        }, 1500); // Poll every 1.5 seconds
+            .withFailureHandler(logPollingError)
+            .getCursorState(); // Updated function name
+        }, 1500);
       }
 
       function stopPolling() {
@@ -178,46 +185,72 @@
           console.log("Stopping focus polling.");
           clearInterval(pollingInterval);
           pollingInterval = null;
+          clearFocus(); // Clear focus when stopping polling
         }
       }
 
-      function updateFocus(focusedQuote) {
-        // Trim quote just in case
-        focusedQuote = focusedQuote ? focusedQuote.trim() : null;
-        
-        if (focusedQuote === currentlyFocusedQuote) {
-          return; // No change
+      function updateFocus(cursorState) {
+        console.log("Polling: Received from getCursorState:", cursorState);
+
+        if (!cursorState || cursorState.bgColor !== HIGHLIGHT_COLOR) {
+            // Cursor is not in a highlighted area, clear focus
+            if (currentlyFocusedCommentId !== null) {
+                console.log("Polling: Cursor left highlighted area, clearing focus.");
+                clearFocus();
+            }
+            return;
         }
 
-        console.log("Focus changed to quote:", focusedQuote);
-
-        // Remove focus from the previous element
-        if (currentlyFocusedQuote) {
-          const oldElement = document.querySelector(`.comment-block[data-quote="${escapeCssSelector(currentlyFocusedQuote)}"]`);
-          if (oldElement) {
-            oldElement.classList.remove('focused-comment');
-          }
+        // Cursor IS in a highlighted area. Find which comment corresponds.
+        // Since we don't get the exact quote back anymore, we assume the *first* comment block
+        // rendered in the sidebar corresponds to the highlighted area. This is a simplification
+        // and might be incorrect if quotes overlap or are identical.
+        // A more robust solution would require Code.gs to return more context (e.g., paragraph text
+        // and offset) and the sidebar to match against its known comment locations.
+        if (currentComments.length > 0) {
+            // For now, just focus the first comment as a placeholder for being in *any* highlight
+            const firstCommentId = 'comment-0'; 
+            if (currentlyFocusedCommentId !== firstCommentId) {
+                console.log(`Polling: Cursor in highlighted area. Focusing first comment (id: ${firstCommentId}) as placeholder.`);
+                setFocus(firstCommentId);
+            }
+        } else {
+             // Highlight detected but no comments stored? Clear focus.
+             if (currentlyFocusedCommentId !== null) {
+                console.log("Polling: Cursor in highlight, but no comments known. Clearing focus.");
+                clearFocus();
+            }
         }
+      }
 
-        // Add focus to the new element
-        if (focusedQuote) {
-          const newElement = document.querySelector(`.comment-block[data-quote="${escapeCssSelector(focusedQuote)}"]`);
-          if (newElement) {
+      function setFocus(commentId) {
+        clearFocus(); // Clear previous focus first
+        const newElement = document.getElementById(commentId);
+        if (newElement) {
+            console.log("Focusing comment:", commentId);
             newElement.classList.add('focused-comment');
             // Optional: Scroll into view
-            // newElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-          } else {
-             console.warn("Could not find comment block for quote:", focusedQuote);
-          }
+            newElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            currentlyFocusedCommentId = commentId;
+        } else {
+            console.warn("setFocus: Could not find comment block with id:", commentId);
+            currentlyFocusedCommentId = null;
         }
+      }
 
-        currentlyFocusedQuote = focusedQuote;
+      function clearFocus() {
+         if (currentlyFocusedCommentId) {
+             console.log("Clearing focus from:", currentlyFocusedCommentId);
+             const oldElement = document.getElementById(currentlyFocusedCommentId);
+             if (oldElement) {
+                oldElement.classList.remove('focused-comment');
+             }
+             currentlyFocusedCommentId = null;
+         }
       }
 
       function logPollingError(error) {
-          // Avoid spamming console for common polling issues, maybe log only once
           console.warn("Polling Error (likely transient):", error);
-          // Consider stopping polling if errors persist
       }
 
       // --- Utility Functions --- 
