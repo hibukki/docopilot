@@ -193,32 +193,61 @@
       function updateFocus(cursorState) {
         console.log("Polling: Received from getCursorState:", cursorState);
 
-        if (!cursorState || cursorState.bgColor !== HIGHLIGHT_COLOR) {
-            // Cursor is not in a highlighted area, clear focus
-            if (currentlyFocusedCommentId !== null) {
-                console.log("Polling: Cursor left highlighted area, clearing focus.");
-                clearFocus();
+        let foundCommentId = null;
+
+        if (cursorState && cursorState.bgColor === HIGHLIGHT_COLOR && cursorState.elementText && currentComments.length > 0) {
+            // Cursor is in a highlighted area with text content, try to find the specific comment
+            const elementText = cursorState.elementText;
+            const cursorOffset = cursorState.offset;
+
+            console.log(`Polling: Cursor in highlight. Offset: ${cursorOffset}, Element Text (start): ${elementText.substring(0, 50)}...`);
+
+            for (let i = 0; i < currentComments.length; i++) {
+                const comment = currentComments[i];
+                const quote = comment.quote;
+                let startIndex = -1;
+                let searchFrom = 0;
+
+                // Find all occurrences of the quote within the element text
+                while ((startIndex = elementText.indexOf(quote, searchFrom)) !== -1) {
+                    const endIndex = startIndex + quote.length;
+                    console.log(`Polling: Checking quote "${quote}" found at index ${startIndex} (ends ${endIndex})`);
+                    
+                    // Check if the cursor offset is within this quote occurrence
+                    // The cursor offset is 0-based. It's considered "within" if it's >= start and <= end.
+                    // If offset is 0, it's at the very beginning. If offset is length, it's after the last char.
+                    if (cursorOffset >= startIndex && cursorOffset <= endIndex) {
+                        console.log(`Polling: Cursor offset ${cursorOffset} is within quote bounds [${startIndex}, ${endIndex}]. Match found!`);
+                        foundCommentId = `comment-${i}`;
+                        break; // Found the comment for this cursor position
+                    }
+                    
+                    // Prepare for the next search iteration to find subsequent occurrences
+                    searchFrom = startIndex + 1; 
+                }
+
+                if (foundCommentId) {
+                    break; // Exit the outer loop once a match is found
+                }
             }
-            return;
+            if (!foundCommentId) {
+                 console.log("Polling: Cursor in highlight, but couldn't match offset to a known quote within the element text.");
+            }
+
+        } else {
+            // Cursor is not in a highlighted area, or missing data
+            console.log("Polling: Cursor not in highlighted area or missing data.");
         }
 
-        // Cursor IS in a highlighted area. Find which comment corresponds.
-        // Since we don't get the exact quote back anymore, we assume the *first* comment block
-        // rendered in the sidebar corresponds to the highlighted area. This is a simplification
-        // and might be incorrect if quotes overlap or are identical.
-        // A more robust solution would require Code.gs to return more context (e.g., paragraph text
-        // and offset) and the sidebar to match against its known comment locations.
-        if (currentComments.length > 0) {
-            // For now, just focus the first comment as a placeholder for being in *any* highlight
-            const firstCommentId = 'comment-0'; 
-            if (currentlyFocusedCommentId !== firstCommentId) {
-                console.log(`Polling: Cursor in highlighted area. Focusing first comment (id: ${firstCommentId}) as placeholder.`);
-                setFocus(firstCommentId);
+        // Update focus based on whether a comment was found
+        if (foundCommentId) {
+            if (currentlyFocusedCommentId !== foundCommentId) {
+                console.log(`Polling: Setting focus to ${foundCommentId}`);
+                setFocus(foundCommentId);
             }
         } else {
-             // Highlight detected but no comments stored? Clear focus.
-             if (currentlyFocusedCommentId !== null) {
-                console.log("Polling: Cursor in highlight, but no comments known. Clearing focus.");
+            if (currentlyFocusedCommentId !== null) {
+                console.log("Polling: Clearing focus.");
                 clearFocus();
             }
         }

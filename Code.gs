@@ -185,10 +185,10 @@ function highlightCommentsInDoc(quotesToHighlight) {
 }
 
 /**
- * Gets the current state of the user's cursor, primarily its location
- * and the background color of the text it's in or near.
+ * Gets the current state of the user's cursor, primarily its location,
+ * the background color, and the text of the surrounding element.
  *
- * @return {object|null} An object like {bgColor: string|null, offset: number, elementTextLength: number|null } or null if no cursor.
+ * @return {object|null} An object like {bgColor: string|null, offset: number, elementText: string|null } or null if no cursor.
  */
 function getCursorState() {
   console.log("getCursorState: Running...");
@@ -206,22 +206,21 @@ function getCursorState() {
     console.log(`getCursorState: Cursor offset=${offset}, Element type=${element ? element.getType() : 'null'}`);
 
     let bgColor = null;
-    let elementTextLength = null;
+    let elementText = null; // Variable to hold the text
 
     if (element && element.getType() === DocumentApp.ElementType.TEXT) {
         const textElement = element.asText();
-        const textContent = textElement.getText();
-        elementTextLength = textContent.length;
-        console.log(`getCursorState: Cursor in TEXT element. Length=${elementTextLength}`);
+        elementText = textElement.getText(); // Get the text content
+        console.log(`getCursorState: Cursor in TEXT element. Length=${elementText.length}`);
 
-        // Check background color *before* the cursor first (most common case when *inside* highlight)
+        // Check background color *before* the cursor first
         if (offset > 0) {
             bgColor = textElement.getBackgroundColor(offset - 1);
             console.log(`getCursorState: Background at offset ${offset - 1} (before cursor): ${bgColor}`);
         }
 
-        // If not highlighted before, check *at* the cursor (for start of highlight)
-        if (bgColor !== HIGHLIGHT_COLOR && offset < textContent.length) {
+        // If not highlighted before, check *at* the cursor
+        if (bgColor !== HIGHLIGHT_COLOR && offset < elementText.length) { // Use elementText.length
             const bgColorAt = textElement.getBackgroundColor(offset);
             console.log(`getCursorState: Background at offset ${offset} (at cursor): ${bgColorAt}`);
             if (bgColorAt === HIGHLIGHT_COLOR) {
@@ -230,30 +229,35 @@ function getCursorState() {
         }
     } else if (element) {
          console.log(`getCursorState: Cursor in non-TEXT element type: ${element.getType()}`);
-         // Attempt to check surrounding text if at the boundary of a paragraph
-         if (offset === 0) {
-             const surroundingText = cursor.getSurroundingText();
-             if (surroundingText && surroundingText.getText().length > 0) {
-                const surroundingBg = surroundingText.getBackgroundColor(0);
-                console.log(`getCursorState: Cursor at offset 0, surrounding text(0) background: ${surroundingBg}`);
-                if (surroundingBg === HIGHLIGHT_COLOR) {
-                    bgColor = HIGHLIGHT_COLOR;
-                    // We don't have the exact element text length here easily
-                }
-            }
-         }
+         // Try getting surrounding text even for non-text elements (might be near text)
+         const surroundingTextElement = cursor.getSurroundingText();
+         if (surroundingTextElement) {
+             elementText = surroundingTextElement.getText();
+             if(elementText.length > 0) {
+                 console.log(`getCursorState: Found surrounding text. Length=${elementText.length}`);
+                 // Check background at the start of the surrounding text if cursor is at offset 0
+                 if (offset === 0) { 
+                    const surroundingBg = surroundingTextElement.getBackgroundColor(0);
+                    console.log(`getCursorState: Surrounding text(0) background: ${surroundingBg}`);
+                    if (surroundingBg === HIGHLIGHT_COLOR) {
+                        bgColor = HIGHLIGHT_COLOR;
+                    }
+                 } 
+             } else {
+                 elementText = null; // No actual text found
+             }
+         } 
     }
 
-    console.log(`getCursorState: Returning state: bgColor=${bgColor}, offset=${offset}, elementTextLength=${elementTextLength}`);
+    console.log(`getCursorState: Returning state: bgColor=${bgColor}, offset=${offset}, text='${elementText ? elementText.substring(0, 50) + '...' : 'null'}'`);
     return {
-        bgColor: bgColor,      // The determined background color (HIGHLIGHT_COLOR or null/other)
-        offset: offset,        // Cursor offset within its element
-        // We could add more context later if needed, e.g., paragraph text, element ID, etc.
-        elementTextLength: elementTextLength // Length of the text element (if applicable)
+        bgColor: bgColor,
+        offset: offset,
+        elementText: elementText // Include the element text
     };
 
   } catch (e) {
     console.error("Error getting cursor state: " + e.stack);
-    return null; // Return null on error to avoid disrupting polling
+    return null;
   }
 } 
