@@ -92,7 +92,6 @@
         // Disable button and show loading state
         analyzeButton.disabled = true;
         resultsDiv.innerHTML = '<p>Fetching document content...</p>';
-        stopPolling(); // Stop polling while fetching new comments
 
         // Save the key when analysis is attempted (if valid)
         if (apiKey) {
@@ -140,7 +139,6 @@
 
          if (!comments || comments.length === 0) {
            resultsDiv.innerHTML = '<p>No comments were generated.</p>';
-           stopPolling();
            return;
          }
 
@@ -183,7 +181,6 @@
         const resultsDiv = document.getElementById('results');
         const analyzeButton = document.getElementById('analyzeButton');
         analyzeButton.disabled = false; // Re-enable button
-        stopPolling(); // Stop polling on error
 
         // Log the full error for debugging
         console.error("Script Error:", JSON.stringify(error, null, 2));
@@ -212,19 +209,6 @@
             .withFailureHandler(logPollingError)
             .getCursorState();
         }, 1500);
-      }
-
-      function stopPolling() {
-        if (pollingInterval) {
-          console.log("Stopping focus polling.");
-          clearInterval(pollingInterval);
-          pollingInterval = null;
-          clearSidebarFocus(); // Clear focus when stopping polling
-          // When polling stops, ensure focus is cleared in doc too
-          if (currentlyFocusedCommentId) {
-            setCommentFocus(null); 
-          }
-        }
       }
 
       function updateFocus(cursorState) {
