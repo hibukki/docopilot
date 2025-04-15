@@ -6,35 +6,55 @@ Proactively get comments on your Google Doc with Gemini.
 
 These steps assume you have [Node.js](https://nodejs.org/) and npm installed.
 
-1.  **Install Clasp:**
-    ```bash
-    npm install -g @google/clasp
-    ```
+### Install Clasp
 
-2.  **Login to Google:**
-    ```bash
-    clasp login
-    ```
-    (Follow the browser authentication flow)
+```bash
+npm install -g @google/clasp
+```
 
-3.  **Create Project:**
-    Create a new Doc and linked script project:
-    ```bash
-    # Replace "My Docopilot Doc" with your desired document title
-    clasp create --title "My Docopilot Doc" --type DOCS
-    ```
-    This will output links to the created Google Doc and Apps Script project.
+It's a tool that let's you write code in your IDE and push it to e.g be a Docs plugin.
 
-4.  **Push Code:**
-    ```bash
-    clasp push
-    ```
-    This uploads the code to the Apps Script project.
+### Login to Google
 
-## Usage
+```bash
+clasp login
+```
 
-1.  Open the Google Doc associated with this script project (use the link from `clasp create` or open the Doc connected to your cloned project).
-2.  Look for the **Docopilot** menu item in the Google Docs menu bar.
-3.  Select **Docopilot > Show sidebar**.
-4.  Configure settings (API Key) there.
-5.  Write something in your doc (or copy over content).
+This gives clasp permission to create a google doc, add a script (plugin) to it, and so on.
+
+### Create Project
+
+This will create one google doc that has an empty script attached.
+
+```bash
+# Replace "My Docopilot Doc" with your desired document title
+clasp create --title "My Docopilot Doc" --type DOCS
+```
+
+#### Find the link to the Google Doc just created
+
+Get in to it, just to make sure it works.
+
+### Push Code
+
+This will make the script that is attached to the google doc we just created contain the local code.
+
+```bash
+clasp push
+```
+
+### Refresh the google doc
+
+When it loads, it will run the code that was just pushed.
+
+### Open the new menu item "Docopilot"
+
+In your Google Doc.
+
+### Enter the settings
+
+(e.g gemini api key)
+
+### Put content in the doc
+
+For Gemini to comment on
