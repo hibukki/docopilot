@@ -377,6 +377,8 @@ function getCursorState() {
   }
 }
 
+const GEMINI_API_KEY_PROPERTY_NAME = 'GEMINI_API_KEY';
+
 /**
  * Saves the user's Gemini API key to User Properties.
  *
@@ -385,11 +387,11 @@ function getCursorState() {
 function saveApiKey(apiKey) {
   try {
     if (apiKey && typeof apiKey === 'string') {
-      PropertiesService.getUserProperties().setProperty('GEMINI_API_KEY', apiKey);
+      PropertiesService.getUserProperties().setProperty(GEMINI_API_KEY_PROPERTY_NAME, apiKey);
       console.log("API Key saved successfully.");
     } else {
       // Optionally clear the key if an empty/invalid value is passed
-      PropertiesService.getUserProperties().deleteProperty('GEMINI_API_KEY');
+      PropertiesService.getUserProperties().deleteProperty(GEMINI_API_KEY_PROPERTY_NAME);
       console.log("Cleared saved API Key.");
     }
   } catch (e) {
@@ -406,7 +408,7 @@ function saveApiKey(apiKey) {
  */
 function getApiKey() {
   try {
-    const savedKey = PropertiesService.getUserProperties().getProperty('GEMINI_API_KEY');
+    const savedKey = PropertiesService.getUserProperties().getProperty(GEMINI_API_KEY_PROPERTY_NAME);
     console.log("Retrieved API Key: " + (savedKey ? 'Found' : 'Not Found'));
     return savedKey;
   } catch (e) {
